@@ -35,4 +35,7 @@ pub use security::{
     validate_extra_mounts, validate_path_in_workspace, SafePath, ShellSecurityConfig,
 };
 pub use session::{Message, Role, Session, SessionManager, ToolCall};
-pub use tools::{cron::CronTool, spawn::SpawnTool, EchoTool, Tool, ToolContext, ToolRegistry};
+pub use tools::{
+    cron::CronTool, spawn::SpawnTool, EchoTool, MessageTool, Tool, ToolContext, ToolRegistry,
+    WebFetchTool, WebSearchTool,
+};

@@ -27,7 +27,7 @@ use zeptoclaw::tools::cron::CronTool;
 use zeptoclaw::tools::filesystem::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
 use zeptoclaw::tools::shell::ShellTool;
 use zeptoclaw::tools::spawn::SpawnTool;
-use zeptoclaw::tools::EchoTool;
+use zeptoclaw::tools::{EchoTool, MessageTool, WebFetchTool, WebSearchTool};
 
 #[derive(Parser)]
 #[command(name = "zeptoclaw")]
@@ -201,6 +201,9 @@ async fn cmd_onboard() -> Result<()> {
         }
     }
 
+    // Configure web search integration
+    configure_web_search(&mut config)?;
+
     // Configure Telegram channel
     configure_telegram(&mut config)?;
 
@@ -219,6 +222,46 @@ async fn cmd_onboard() -> Result<()> {
     println!("  1. Run 'zeptoclaw agent' to start the interactive agent");
     println!("  2. Run 'zeptoclaw gateway' to start the multi-channel gateway");
     println!("  3. Run 'zeptoclaw status' to check your configuration");
+
+    Ok(())
+}
+
+/// Configure Brave Search API key for web_search tool.
+fn configure_web_search(config: &mut Config) -> Result<()> {
+    println!();
+    println!("Web Search Setup (Brave)");
+    println!("------------------------");
+    println!("Get an API key from: https://brave.com/search/api/");
+    println!();
+    print!("Enter Brave Search API key (or press Enter to skip): ");
+    io::stdout().flush()?;
+
+    let api_key = read_secret()?;
+    if !api_key.is_empty() {
+        config.tools.web.search.api_key = Some(api_key);
+        println!("  Brave Search API key configured.");
+    } else {
+        println!("  Skipped web search API key setup.");
+    }
+
+    print!(
+        "Default web_search result count [1-10, current={}]: ",
+        config.tools.web.search.max_results
+    );
+    io::stdout().flush()?;
+
+    let count = read_line()?;
+    if !count.is_empty() {
+        if let Ok(parsed) = count.parse::<u32>() {
+            config.tools.web.search.max_results = parsed.clamp(1, 10);
+            println!(
+                "  Default web_search max_results set to {}.",
+                config.tools.web.search.max_results
+            );
+        } else {
+            println!("  Invalid number. Keeping current value.");
+        }
+    }
 
     Ok(())
 }
@@ -457,6 +500,29 @@ Enable runtime.allow_fallback_to_native to opt in to native fallback.",
     agent
         .register_tool(Box::new(ShellTool::with_runtime(runtime)))
         .await;
+
+    // Register web tools.
+    if let Some(web_search_key) = config.tools.web.search.api_key.as_deref() {
+        let web_search_key = web_search_key.trim();
+        if !web_search_key.is_empty() {
+            agent
+                .register_tool(Box::new(WebSearchTool::with_max_results(
+                    web_search_key,
+                    config.tools.web.search.max_results as usize,
+                )))
+                .await;
+            info!("Registered web_search tool");
+        }
+    }
+    agent.register_tool(Box::new(WebFetchTool::new())).await;
+    info!("Registered web_fetch tool");
+
+    // Register proactive messaging tool.
+    agent
+        .register_tool(Box::new(MessageTool::new(agent.bus().clone())))
+        .await;
+    info!("Registered message tool");
+
     agent
         .register_tool(Box::new(CronTool::new(cron_service.clone())))
         .await;
@@ -995,6 +1061,21 @@ async fn cmd_status() -> Result<()> {
     println!("  - list_dir");
     println!("  - edit_file");
     println!("  - shell");
+    if config
+        .tools
+        .web
+        .search
+        .api_key
+        .as_ref()
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
+    {
+        println!("  - web_search");
+    } else {
+        println!("  - web_search (disabled: set tools.web.search.api_key or BRAVE_API_KEY)");
+    }
+    println!("  - web_fetch");
+    println!("  - message");
     println!("  - cron");
     println!("  - spawn");
     println!();

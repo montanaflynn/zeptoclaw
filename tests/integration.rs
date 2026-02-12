@@ -13,7 +13,7 @@ use zeptoclaw::{
     session::{Message, SessionManager},
     tools::filesystem::ReadFileTool,
     tools::shell::ShellTool,
-    tools::{EchoTool, Tool, ToolContext, ToolRegistry},
+    tools::{EchoTool, MessageTool, Tool, ToolContext, ToolRegistry, WebFetchTool, WebSearchTool},
 };
 
 // ============================================================================
@@ -418,6 +418,46 @@ fn test_config_channel_settings() {
     assert!(telegram.enabled);
     assert_eq!(telegram.token, "123456:ABC-DEF");
     assert_eq!(telegram.allow_from, vec!["user1", "user2"]);
+}
+
+#[test]
+fn test_config_web_search_settings() {
+    let json = r#"{
+        "tools": {
+            "web": {
+                "search": {
+                    "api_key": "test-brave-key",
+                    "max_results": 7
+                }
+            }
+        }
+    }"#;
+
+    let config: Config = serde_json::from_str(json).unwrap();
+    assert_eq!(
+        config.tools.web.search.api_key,
+        Some("test-brave-key".to_string())
+    );
+    assert_eq!(config.tools.web.search.max_results, 7);
+}
+
+#[test]
+fn test_web_search_tool_creation() {
+    let tool = WebSearchTool::new("test-key");
+    assert_eq!(tool.name(), "web_search");
+}
+
+#[test]
+fn test_web_fetch_tool_creation() {
+    let tool = WebFetchTool::new();
+    assert_eq!(tool.name(), "web_fetch");
+}
+
+#[test]
+fn test_message_tool_creation() {
+    let bus = Arc::new(MessageBus::new());
+    let tool = MessageTool::new(bus);
+    assert_eq!(tool.name(), "message");
 }
 
 // ============================================================================

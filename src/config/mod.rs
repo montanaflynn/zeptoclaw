@@ -94,6 +94,9 @@ impl Config {
 
         // Channel overrides
         self.apply_channel_env_overrides();
+
+        // Tool-specific overrides
+        self.apply_tool_env_overrides();
     }
 
     /// Apply provider-specific environment variable overrides
@@ -250,6 +253,24 @@ impl Config {
                     .whatsapp
                     .get_or_insert_with(WhatsAppConfig::default);
                 channel.enabled = enabled;
+            }
+        }
+    }
+
+    /// Apply tool-specific environment variable overrides
+    fn apply_tool_env_overrides(&mut self) {
+        // Web search API key (prefer explicit tool-scoped variable).
+        if let Ok(val) = std::env::var("ZEPTOCLAW_TOOLS_WEB_SEARCH_API_KEY") {
+            self.tools.web.search.api_key = Some(val);
+        } else if let Ok(val) = std::env::var("ZEPTOCLAW_INTEGRATIONS_BRAVE_API_KEY") {
+            self.tools.web.search.api_key = Some(val);
+        } else if let Ok(val) = std::env::var("BRAVE_API_KEY") {
+            self.tools.web.search.api_key = Some(val);
+        }
+
+        if let Ok(val) = std::env::var("ZEPTOCLAW_TOOLS_WEB_SEARCH_MAX_RESULTS") {
+            if let Ok(v) = val.parse::<u32>() {
+                self.tools.web.search.max_results = v.clamp(1, 10);
             }
         }
     }
@@ -586,16 +607,25 @@ mod tests {
         // Set env var
         env::set_var("ZEPTOCLAW_AGENTS_DEFAULTS_MODEL", "test-model");
         env::set_var("ZEPTOCLAW_AGENTS_DEFAULTS_MAX_TOKENS", "1000");
+        env::set_var("BRAVE_API_KEY", "test-brave-key");
+        env::set_var("ZEPTOCLAW_TOOLS_WEB_SEARCH_MAX_RESULTS", "9");
 
         let mut config = Config::default();
         config.apply_env_overrides();
 
         assert_eq!(config.agents.defaults.model, "test-model");
         assert_eq!(config.agents.defaults.max_tokens, 1000);
+        assert_eq!(
+            config.tools.web.search.api_key,
+            Some("test-brave-key".to_string())
+        );
+        assert_eq!(config.tools.web.search.max_results, 9);
 
         // Clean up
         env::remove_var("ZEPTOCLAW_AGENTS_DEFAULTS_MODEL");
         env::remove_var("ZEPTOCLAW_AGENTS_DEFAULTS_MAX_TOKENS");
+        env::remove_var("BRAVE_API_KEY");
+        env::remove_var("ZEPTOCLAW_TOOLS_WEB_SEARCH_MAX_RESULTS");
     }
 
     #[test]

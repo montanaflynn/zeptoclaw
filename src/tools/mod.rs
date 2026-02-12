@@ -19,6 +19,9 @@
 //! - `ListDirTool`: List directory contents
 //! - `EditFileTool`: Edit a file by replacing text
 //! - `ShellTool`: Execute shell commands
+//! - `WebSearchTool`: Search the web via Brave Search API
+//! - `WebFetchTool`: Fetch URL content and extract text
+//! - `MessageTool`: Send proactive outbound chat messages
 //!
 //! # Example
 //!
@@ -47,13 +50,17 @@
 
 pub mod cron;
 pub mod filesystem;
+pub mod message;
 mod registry;
 pub mod shell;
 pub mod spawn;
 mod types;
+pub mod web;
 
+pub use message::MessageTool;
 pub use registry::ToolRegistry;
 pub use types::{Tool, ToolContext};
+pub use web::{WebFetchTool, WebSearchTool};
 
 use async_trait::async_trait;
 use serde_json::Value;
