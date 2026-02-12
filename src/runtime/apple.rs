@@ -68,21 +68,46 @@ impl ContainerRuntime for AppleContainerRuntime {
     }
 
     async fn is_available(&self) -> bool {
-        // Check if we're on macOS and the container tool is available
+        // Check if we're on macOS
         if !cfg!(target_os = "macos") {
             return false;
         }
 
-        // Check for Apple's container tool
-        // The tool is available via Virtualization framework on macOS 15+
-        Command::new("container")
+        // Step 1: Check if container tool exists
+        let version_check = Command::new("container")
             .arg("--version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
             .await
             .map(|s| s.success())
-            .unwrap_or(false)
+            .unwrap_or(false);
+
+        if !version_check {
+            return false;
+        }
+
+        // Step 2: Validate CLI syntax compatibility by attempting a simple command
+        // This catches cases where the tool exists but uses different syntax
+        // We use --help on the run subcommand to validate syntax without executing
+        let syntax_check = Command::new("container")
+            .args(["run", "--help"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        if !syntax_check {
+            warn!(
+                "Apple Container tool found but 'container run --help' failed. \
+                CLI syntax may be incompatible with this implementation."
+            );
+            return false;
+        }
+
+        true
     }
 
     async fn execute(
