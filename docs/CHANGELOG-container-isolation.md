@@ -40,6 +40,39 @@ Added selectable container runtime support to ZeptoClaw, allowing shell commands
 | `2781a7b` | feat(main): add runtime configuration and selection to onboard |
 | `535046e` | test: add runtime integration tests |
 | `1b44a6e` | chore: fix code formatting |
+| `3da5dcd` | docs: add container isolation implementation changelog |
+| `788926b` | fix: address code review findings |
+
+## Code Review Fixes
+
+### Finding 1 (Medium): extra_mounts was a no-op
+
+**Problem:** `extra_mounts` was defined in `DockerConfig` and `AppleContainerConfig` but never applied when executing commands.
+
+**Fix:**
+- Added `extra_mounts: Vec<String>` field to `DockerRuntime` struct
+- Added `with_extra_mounts()` builder method to `DockerRuntime`
+- Applied extra mounts in `DockerRuntime::execute()` using `-v` flag
+- Added same support to `AppleContainerRuntime`
+- Updated factory to pass `extra_mounts` from config to runtimes
+
+### Finding 2 (Medium): Apple runtime experimental status not clear
+
+**Problem:** Apple Container runtime is based on assumed CLI interface, may fail at runtime even if availability check passes.
+
+**Fix:**
+- Added prominent warning in module-level documentation
+- Added warning in struct documentation
+- Added runtime warning log in `execute()` method
+- Clarified that availability check only validates `container --version`
+
+### Already Implemented: Opt-in native fallback
+
+The following was already implemented in the initial implementation:
+- `allow_fallback_to_native` field in `RuntimeConfig` (default: `false`)
+- `create_agent()` only falls back when opted in, otherwise errors
+- Onboarding prompts for fallback choice on Docker/Apple
+- Status command displays fallback mode
 
 ## Files Changed
 
