@@ -54,6 +54,7 @@
 //! ```
 
 pub mod cron;
+pub mod delegate;
 pub mod filesystem;
 pub mod gsheets;
 pub mod memory;
@@ -66,6 +67,7 @@ mod types;
 pub mod web;
 pub mod whatsapp;
 
+pub use delegate::DelegateTool;
 pub use gsheets::GoogleSheetsTool;
 pub use memory::{MemoryGetTool, MemorySearchTool};
 pub use message::MessageTool;
