@@ -31,14 +31,14 @@ If you skip this, the next agent starts with stale context and wastes time.
 ### Recently Completed
 - Streaming responses — SSE for both Claude and OpenAI providers, `--stream` CLI flag
 - Agent swarm — DelegateTool with recursion blocking, ProviderRef wrapper
-- RetryProvider — exponential backoff on 429/5xx (`src/providers/retry.rs`)
-- FallbackProvider — primary → secondary auto-failover (`src/providers/fallback.rs`)
-- MetricsCollector — per-tool call stats, token tracking (`src/utils/metrics.rs`)
+- RetryProvider — exponential backoff on 429/5xx, wired into provider stack
+- FallbackProvider — primary → secondary auto-failover, wired with multi-provider resolution
+- MetricsCollector — wired into AgentLoop, tracks per-tool duration/success + token usage
+- Config fields for retry (`providers.retry.*`) and fallback (`providers.fallback.*`) with env overrides
+- Provider stack: base provider → optional FallbackProvider → optional RetryProvider
 
-### Not Yet Wired (needs main.rs / config integration)
-- `src/providers/retry.rs` → needs config fields + wiring in provider resolution
-- `src/providers/fallback.rs` → needs multi-provider config + wiring
-- `src/utils/metrics.rs` → needs integration into AgentLoop tool execution
+### Everything is wired
+All existing modules are integrated. Next work comes from the backlog.
 
 ### Roadmap
 See `docs/plans/TODO.md` for the full checklist.

@@ -42,14 +42,12 @@ After completing any feature, update these 3 files:
 - [x] FallbackProvider (`src/providers/fallback.rs`) — primary → secondary auto-failover
 - [x] MetricsCollector (`src/utils/metrics.rs`) — tool call stats, token tracking, session summary
 
-## Not Yet Wired
-
-These modules exist but aren't used in `main.rs` yet:
-
-- [ ] Wire RetryProvider into provider resolution (`main.rs`)
-- [ ] Wire FallbackProvider into multi-provider config (`main.rs`)
-- [ ] Wire MetricsCollector into AgentLoop for tool call tracking
-- [ ] Add config fields for retry/fallback settings (`config/types.rs`)
+### Wiring (2026-02-14)
+- [x] Config fields for retry/fallback (`config/types.rs`, `config/mod.rs` env overrides)
+- [x] RetryProvider wired into provider resolution (`main.rs`) — base → fallback → retry stack
+- [x] FallbackProvider wired with multi-provider resolution (`providers/registry.rs`)
+- [x] MetricsCollector wired into AgentLoop — tracks tool duration/success + token usage
+- [x] Status output shows retry/fallback state
 
 ## Backlog — Next Features
 

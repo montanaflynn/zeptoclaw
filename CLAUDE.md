@@ -102,8 +102,9 @@ Containerized agent proxy for full request isolation:
 LLM provider abstraction via `LLMProvider` trait:
 - `ClaudeProvider` - Anthropic Claude API (120s timeout, SSE streaming)
 - `OpenAIProvider` - OpenAI Chat Completions API (120s timeout, SSE streaming)
-- `RetryProvider` - Decorator: exponential backoff on 429/5xx (not yet wired)
-- `FallbackProvider` - Decorator: primary → secondary auto-failover (not yet wired)
+- `RetryProvider` - Decorator: exponential backoff on 429/5xx
+- `FallbackProvider` - Decorator: primary → secondary auto-failover
+- Provider stack in `create_agent()`: base → optional FallbackProvider → optional RetryProvider
 - `StreamEvent` enum + `chat_stream()` on LLMProvider trait for token-by-token streaming
 
 ### Channels (`src/channels/`)
@@ -117,7 +118,7 @@ Message input channels via `Channel` trait:
 
 ### Utils (`src/utils/`)
 - `sanitize.rs` - Tool result sanitization (strip base64, hex, truncate)
-- `metrics.rs` - MetricsCollector: per-tool call stats, token tracking, session summary (not yet wired)
+- `metrics.rs` - MetricsCollector: per-tool call stats, token tracking, session summary (wired into AgentLoop)
 
 ### Security (`src/security/`)
 - `shell.rs` - Regex-based command blocklist
@@ -134,6 +135,12 @@ Environment variables override config:
 - `ZEPTOCLAW_CHANNELS_TELEGRAM_BOT_TOKEN`
 - `ZEPTOCLAW_AGENTS_DEFAULTS_AGENT_TIMEOUT_SECS` — wall-clock timeout for agent runs (default: 300)
 - `ZEPTOCLAW_AGENTS_DEFAULTS_MESSAGE_QUEUE_MODE` — "collect" (default) or "followup"
+- `ZEPTOCLAW_PROVIDERS_RETRY_ENABLED` — enable retry wrapper (default: false)
+- `ZEPTOCLAW_PROVIDERS_RETRY_MAX_RETRIES` — max retry attempts (default: 3)
+- `ZEPTOCLAW_PROVIDERS_RETRY_BASE_DELAY_MS` — base delay in ms (default: 1000)
+- `ZEPTOCLAW_PROVIDERS_RETRY_MAX_DELAY_MS` — max delay in ms (default: 30000)
+- `ZEPTOCLAW_PROVIDERS_FALLBACK_ENABLED` — enable fallback provider (default: false)
+- `ZEPTOCLAW_PROVIDERS_FALLBACK_PROVIDER` — fallback provider name
 
 ### Compile-time Configuration
 
