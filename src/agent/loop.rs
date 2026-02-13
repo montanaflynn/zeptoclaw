@@ -305,51 +305,68 @@ impl AgentLoop {
             );
             session.add_message(assistant_msg);
 
-            // Execute each tool call
-            // Use workspace_path() to expand ~ to home directory
+            // Execute tool calls in parallel
             let workspace = self.config.workspace_path();
             let workspace_str = workspace.to_string_lossy();
             let tool_ctx = ToolContext::new()
                 .with_channel(&msg.channel, &msg.chat_id)
                 .with_workspace(&workspace_str);
 
-            for tool_call in &response.tool_calls {
-                info!(tool = %tool_call.name, id = %tool_call.id, "Executing tool");
+            let tool_futures: Vec<_> = response
+                .tool_calls
+                .iter()
+                .map(|tool_call| {
+                    let tools = Arc::clone(&self.tools);
+                    let ctx = tool_ctx.clone();
+                    let name = tool_call.name.clone();
+                    let id = tool_call.id.clone();
+                    let raw_args = tool_call.arguments.clone();
+                    let usage_metrics = usage_metrics.clone();
 
-                let args: serde_json::Value = match serde_json::from_str(&tool_call.arguments) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        tracing::warn!(tool = %tool_call.name, error = %e, "Invalid JSON in tool arguments");
-                        serde_json::json!({"_parse_error": format!("Invalid arguments JSON: {}", e)})
-                    }
-                };
-
-                // Acquire the tools read lock only for the duration of each
-                // tool execution, then release it between calls.
-                let tool_start = std::time::Instant::now();
-                let result = {
-                    let tools = self.tools.read().await;
-                    match tools
-                        .execute_with_context(&tool_call.name, args, &tool_ctx)
-                        .await
-                    {
-                        Ok(r) => {
-                            let tool_latency_ms = tool_start.elapsed().as_millis() as u64;
-                            debug!(tool = %tool_call.name, latency_ms = tool_latency_ms, "Tool executed successfully");
-                            r
-                        }
-                        Err(e) => {
-                            let tool_latency_ms = tool_start.elapsed().as_millis() as u64;
-                            error!(tool = %tool_call.name, latency_ms = tool_latency_ms, error = %e, "Tool execution failed");
-                            if let Some(metrics) = usage_metrics.as_ref() {
-                                metrics.record_error();
+                    async move {
+                        let args: serde_json::Value = match serde_json::from_str(&raw_args) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                tracing::warn!(tool = %name, error = %e, "Invalid JSON in tool arguments");
+                                serde_json::json!({"_parse_error": format!("Invalid arguments JSON: {}", e)})
                             }
-                            format!("Error: {}", e)
-                        }
-                    }
-                };
+                        };
 
-                session.add_message(Message::tool_result(&tool_call.id, &result));
+                        let tool_start = std::time::Instant::now();
+                        let result = {
+                            let tools_guard = tools.read().await;
+                            match tools_guard.execute_with_context(&name, args, &ctx).await {
+                                Ok(r) => {
+                                    let latency_ms = tool_start.elapsed().as_millis() as u64;
+                                    debug!(tool = %name, latency_ms = latency_ms, "Tool executed successfully");
+                                    r
+                                }
+                                Err(e) => {
+                                    let latency_ms = tool_start.elapsed().as_millis() as u64;
+                                    error!(tool = %name, latency_ms = latency_ms, error = %e, "Tool execution failed");
+                                    if let Some(metrics) = usage_metrics.as_ref() {
+                                        metrics.record_error();
+                                    }
+                                    format!("Error: {}", e)
+                                }
+                            }
+                        };
+
+                        // Sanitize the result before feeding back to LLM
+                        let sanitized = crate::utils::sanitize::sanitize_tool_result(
+                            &result,
+                            crate::utils::sanitize::DEFAULT_MAX_RESULT_BYTES,
+                        );
+
+                        (id, sanitized)
+                    }
+                })
+                .collect();
+
+            let results = futures::future::join_all(tool_futures).await;
+
+            for (id, result) in results {
+                session.add_message(Message::tool_result(&id, &result));
             }
 
             // Get fresh tool definitions for the next LLM call
