@@ -84,6 +84,13 @@ impl Config {
                 self.agents.defaults.agent_timeout_secs = v;
             }
         }
+        if let Ok(val) = std::env::var("ZEPTOCLAW_AGENTS_DEFAULTS_MESSAGE_QUEUE_MODE") {
+            match val.trim().to_ascii_lowercase().as_str() {
+                "collect" => self.agents.defaults.message_queue_mode = MessageQueueMode::Collect,
+                "followup" => self.agents.defaults.message_queue_mode = MessageQueueMode::Followup,
+                _ => {}
+            }
+        }
 
         // Gateway
         if let Ok(val) = std::env::var("ZEPTOCLAW_GATEWAY_HOST") {
@@ -989,5 +996,24 @@ mod tests {
         let json = r#"{"agents": {"defaults": {"agent_timeout_secs": 600}}}"#;
         let config: Config = serde_json::from_str(json).unwrap();
         assert_eq!(config.agents.defaults.agent_timeout_secs, 600);
+    }
+
+    #[test]
+    fn test_message_queue_mode_default() {
+        let config = Config::default();
+        assert_eq!(
+            config.agents.defaults.message_queue_mode,
+            MessageQueueMode::Collect
+        );
+    }
+
+    #[test]
+    fn test_message_queue_mode_from_json() {
+        let json = r#"{"agents": {"defaults": {"message_queue_mode": "followup"}}}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            config.agents.defaults.message_queue_mode,
+            MessageQueueMode::Followup
+        );
     }
 }

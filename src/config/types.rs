@@ -57,6 +57,8 @@ pub struct AgentDefaults {
     pub max_tool_iterations: u32,
     /// Maximum wall-clock time (seconds) for a single agent run.
     pub agent_timeout_secs: u64,
+    /// How to handle messages arriving during an active run.
+    pub message_queue_mode: MessageQueueMode,
 }
 
 /// Default model compile-time configuration.
@@ -75,8 +77,20 @@ impl Default for AgentDefaults {
             temperature: 0.7,
             max_tool_iterations: 20,
             agent_timeout_secs: 300,
+            message_queue_mode: MessageQueueMode::default(),
         }
     }
+}
+
+/// How to handle messages that arrive while an agent run is active.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MessageQueueMode {
+    /// Buffer messages, concatenate into one when current run finishes.
+    #[default]
+    Collect,
+    /// Buffer messages, replay each as a separate run after current finishes.
+    Followup,
 }
 
 // ============================================================================

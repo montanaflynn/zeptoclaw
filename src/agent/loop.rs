@@ -71,6 +71,8 @@ pub struct AgentLoop {
     shutdown_tx: watch::Sender<bool>,
     /// Per-session locks to serialize concurrent messages for the same session
     session_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    /// Pending messages for sessions with active runs (for queue modes).
+    pending_messages: Arc<Mutex<HashMap<String, Vec<InboundMessage>>>>,
 }
 
 impl AgentLoop {
@@ -108,6 +110,7 @@ impl AgentLoop {
             usage_metrics: Arc::new(RwLock::new(None)),
             shutdown_tx,
             session_locks: Arc::new(Mutex::new(HashMap::new())),
+            pending_messages: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -136,6 +139,7 @@ impl AgentLoop {
             usage_metrics: Arc::new(RwLock::new(None)),
             shutdown_tx,
             session_locks: Arc::new(Mutex::new(HashMap::new())),
+            pending_messages: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -406,6 +410,36 @@ impl AgentLoop {
         Ok(response.content)
     }
 
+    /// Try to queue a message if the session is busy, or return false if lock is free.
+    /// Returns `true` if the message was queued (caller should not wait for response).
+    pub async fn try_queue_or_process(&self, msg: &InboundMessage) -> bool {
+        let session_lock = {
+            let mut locks = self.session_locks.lock().await;
+            locks
+                .entry(msg.session_key.clone())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+
+        // Try to acquire the lock without blocking
+        let is_busy = session_lock.try_lock().is_err();
+
+        if is_busy {
+            // Session is busy, queue the message
+            let mut pending = self.pending_messages.lock().await;
+            pending
+                .entry(msg.session_key.clone())
+                .or_default()
+                .push(msg.clone());
+            debug!(session = %msg.session_key, "Message queued (session busy)");
+            true
+        } else {
+            // Lock acquired and immediately dropped — caller should process normally
+            // The real lock is acquired in process_message
+            false
+        }
+    }
+
     /// Start the agent loop (consuming from message bus).
     ///
     /// This method runs in a loop, consuming messages from the inbound
@@ -548,6 +582,46 @@ impl AgentLoop {
                                         &format!("Agent run timed out after {}s. Try a simpler request.", timeout_secs),
                                     );
                                     bus_ref.publish_outbound(timeout_msg).await.ok();
+                                }
+                            }
+
+                            // After processing, drain any pending messages for this session
+                            let pending = {
+                                let mut map = self.pending_messages.lock().await;
+                                map.remove(&msg_ref.session_key).unwrap_or_default()
+                            };
+
+                            if !pending.is_empty() {
+                                match self.config.agents.defaults.message_queue_mode {
+                                    crate::config::MessageQueueMode::Collect => {
+                                        // Concatenate all pending messages into one
+                                        let combined: Vec<String> = pending
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(i, m)| format!("{}. {}", i + 1, m.content))
+                                            .collect();
+                                        let combined_content = format!(
+                                            "[Queued messages while I was busy]\n\n{}",
+                                            combined.join("\n")
+                                        );
+                                        let synthetic = InboundMessage::new(
+                                            &msg_ref.channel,
+                                            &msg_ref.sender_id,
+                                            &msg_ref.chat_id,
+                                            &combined_content,
+                                        );
+                                        if let Err(e) = bus_ref.publish_inbound(synthetic).await {
+                                            error!("Failed to re-queue collected messages: {}", e);
+                                        }
+                                    }
+                                    crate::config::MessageQueueMode::Followup => {
+                                        // Replay each pending message as a separate inbound
+                                        for pending_msg in pending {
+                                            if let Err(e) = bus_ref.publish_inbound(pending_msg).await {
+                                                error!("Failed to re-queue followup message: {}", e);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }.instrument(request_span).await;
