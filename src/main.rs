@@ -192,10 +192,10 @@ fn read_line() -> Result<String> {
     Ok(input.trim().to_string())
 }
 
-/// Read a password/API key from stdin (no echo if possible)
+/// Read a password/API key from stdin (hidden input)
 fn read_secret() -> Result<String> {
-    // For now, just read normally. Could use rpassword crate for hidden input.
-    read_line()
+    rpassword::read_password_from_bufread(&mut std::io::stdin().lock())
+        .with_context(|| "Failed to read secret input")
 }
 
 /// Initialize configuration directory and save default config
