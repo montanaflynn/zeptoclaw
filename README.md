@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/mascot.png" width="200" alt="Zippy — ZeptoClaw mascot">
+  <img src="assets/mascot-no-bg.png" width="200" alt="Zippy — ZeptoClaw mascot">
 </p>
 <h1 align="center">ZeptoClaw</h1>
 <p align="center">
