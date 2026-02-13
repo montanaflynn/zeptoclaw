@@ -57,11 +57,18 @@ pub struct AgentDefaults {
     pub max_tool_iterations: u32,
 }
 
+/// Default model compile-time configuration.
+/// Set `ZEPTOCLAW_DEFAULT_MODEL` at compile time to override.
+const COMPILE_TIME_DEFAULT_MODEL: &str = match option_env!("ZEPTOCLAW_DEFAULT_MODEL") {
+    Some(v) => v,
+    None => "claude-sonnet-4-5-20250929",
+};
+
 impl Default for AgentDefaults {
     fn default() -> Self {
         Self {
             workspace: "~/.zeptoclaw/workspace".to_string(),
-            model: "claude-sonnet-4-5-20250929".to_string(),
+            model: COMPILE_TIME_DEFAULT_MODEL.to_string(),
             max_tokens: 8192,
             temperature: 0.7,
             max_tool_iterations: 20,

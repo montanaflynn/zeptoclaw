@@ -42,7 +42,11 @@ use super::{ChatOptions, LLMProvider, LLMResponse, LLMToolCall, ToolDefinition, 
 const OPENAI_API_URL: &str = "https://api.openai.com/v1";
 
 /// The default OpenAI model to use.
-const DEFAULT_MODEL: &str = "gpt-4o";
+/// Can be overridden at compile time with `ZEPTOCLAW_OPENAI_DEFAULT_MODEL` env var.
+const DEFAULT_MODEL: &str = match option_env!("ZEPTOCLAW_OPENAI_DEFAULT_MODEL") {
+    Some(v) => v,
+    None => "gpt-4o",
+};
 
 // ============================================================================
 // OpenAI API Request Types

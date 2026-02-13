@@ -39,7 +39,11 @@ use super::{ChatOptions, LLMProvider, LLMResponse, LLMToolCall, ToolDefinition, 
 const CLAUDE_API_URL: &str = "https://api.anthropic.com/v1/messages";
 
 /// The default Claude model to use.
-const DEFAULT_MODEL: &str = "claude-sonnet-4-5-20250929";
+/// Can be overridden at compile time with `ZEPTOCLAW_CLAUDE_DEFAULT_MODEL` env var.
+const DEFAULT_MODEL: &str = match option_env!("ZEPTOCLAW_CLAUDE_DEFAULT_MODEL") {
+    Some(v) => v,
+    None => "claude-sonnet-4-5-20250929",
+};
 
 /// The Anthropic API version header value.
 const ANTHROPIC_VERSION: &str = "2023-06-01";

@@ -116,6 +116,19 @@ Environment variables override config:
 - `ZEPTOCLAW_PROVIDERS_OPENAI_API_KEY`
 - `ZEPTOCLAW_CHANNELS_TELEGRAM_BOT_TOKEN`
 
+### Compile-time Configuration
+
+Default models can be set at compile time using environment variables:
+- `ZEPTOCLAW_DEFAULT_MODEL` - Default model for agent (default: claude-sonnet-4-5-20250929)
+- `ZEPTOCLAW_CLAUDE_DEFAULT_MODEL` - Default Claude model (default: claude-sonnet-4-5-20250929)
+- `ZEPTOCLAW_OPENAI_DEFAULT_MODEL` - Default OpenAI model (default: gpt-4o)
+
+Example:
+```bash
+export ZEPTOCLAW_DEFAULT_MODEL=gpt-4o
+cargo build --release
+```
+
 ## Design Patterns
 
 - **Async-first**: All I/O uses Tokio async runtime
