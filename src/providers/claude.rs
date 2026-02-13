@@ -170,8 +170,8 @@ impl LLMProvider for ClaudeProvider {
         model: Option<&str>,
         options: ChatOptions,
     ) -> crate::error::Result<tokio::sync::mpsc::Receiver<super::StreamEvent>> {
-        use futures::StreamExt;
         use super::StreamEvent;
+        use futures::StreamExt;
 
         let model = model.unwrap_or(DEFAULT_MODEL);
         let (system, claude_messages) = convert_messages(messages)?;
@@ -236,9 +236,12 @@ impl LLMProvider for ClaudeProvider {
                 let chunk = match chunk_result {
                     Ok(bytes) => bytes,
                     Err(e) => {
-                        let _ = tx.send(StreamEvent::Error(
-                            ZeptoError::Provider(format!("Stream read error: {}", e))
-                        )).await;
+                        let _ = tx
+                            .send(StreamEvent::Error(ZeptoError::Provider(format!(
+                                "Stream read error: {}",
+                                e
+                            ))))
+                            .await;
                         return;
                     }
                 };
@@ -294,7 +297,11 @@ impl LLMProvider for ClaudeProvider {
                                     Some("text_delta") => {
                                         if let Some(text) = &delta.text {
                                             assembled_content.push_str(text);
-                                            if tx.send(StreamEvent::Delta(text.clone())).await.is_err() {
+                                            if tx
+                                                .send(StreamEvent::Delta(text.clone()))
+                                                .await
+                                                .is_err()
+                                            {
                                                 return;
                                             }
                                         }
@@ -309,7 +316,9 @@ impl LLMProvider for ClaudeProvider {
                             }
                         }
                         "content_block_stop" => {
-                            if let (Some(id), Some(name)) = (current_tool_id.take(), current_tool_name.take()) {
+                            if let (Some(id), Some(name)) =
+                                (current_tool_id.take(), current_tool_name.take())
+                            {
                                 let args = if current_tool_json.is_empty() {
                                     "{}".to_string()
                                 } else {
@@ -325,15 +334,17 @@ impl LLMProvider for ClaudeProvider {
                         }
                         "message_stop" => {
                             if !tool_calls.is_empty() {
-                                let _ = tx.send(StreamEvent::ToolCalls(
-                                    std::mem::take(&mut tool_calls)
-                                )).await;
+                                let _ = tx
+                                    .send(StreamEvent::ToolCalls(std::mem::take(&mut tool_calls)))
+                                    .await;
                             }
                             let usage = super::Usage::new(input_tokens, output_tokens);
-                            let _ = tx.send(StreamEvent::Done {
-                                content: assembled_content.clone(),
-                                usage: Some(usage),
-                            }).await;
+                            let _ = tx
+                                .send(StreamEvent::Done {
+                                    content: assembled_content.clone(),
+                                    usage: Some(usage),
+                                })
+                                .await;
                             return;
                         }
                         _ => {}
@@ -342,15 +353,17 @@ impl LLMProvider for ClaudeProvider {
             }
 
             if !tool_calls.is_empty() {
-                let _ = tx.send(StreamEvent::ToolCalls(
-                    std::mem::take(&mut tool_calls)
-                )).await;
+                let _ = tx
+                    .send(StreamEvent::ToolCalls(std::mem::take(&mut tool_calls)))
+                    .await;
             }
             let usage = super::Usage::new(input_tokens, output_tokens);
-            let _ = tx.send(StreamEvent::Done {
-                content: assembled_content,
-                usage: Some(usage),
-            }).await;
+            let _ = tx
+                .send(StreamEvent::Done {
+                    content: assembled_content,
+                    usage: Some(usage),
+                })
+                .await;
         });
 
         Ok(rx)
@@ -1120,7 +1133,13 @@ mod tests {
     fn test_parse_sse_content_block_start_tool_use() {
         let line = r#"{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_01","name":"web_search","input":{}}}"#;
         let parsed: serde_json::Value = serde_json::from_str(line).unwrap();
-        assert_eq!(parsed["content_block"]["type"].as_str().unwrap(), "tool_use");
-        assert_eq!(parsed["content_block"]["name"].as_str().unwrap(), "web_search");
+        assert_eq!(
+            parsed["content_block"]["type"].as_str().unwrap(),
+            "tool_use"
+        );
+        assert_eq!(
+            parsed["content_block"]["name"].as_str().unwrap(),
+            "web_search"
+        );
     }
 }

@@ -17,7 +17,10 @@ pub enum StreamEvent {
     /// Tool calls detected mid-stream (triggers fallback to non-streaming tool loop).
     ToolCalls(Vec<LLMToolCall>),
     /// Stream complete — carries the full assembled content and usage stats.
-    Done { content: String, usage: Option<Usage> },
+    Done {
+        content: String,
+        usage: Option<Usage>,
+    },
     /// Provider error mid-stream.
     Error(ZeptoError),
 }
@@ -626,8 +629,12 @@ mod tests {
             ) -> Result<LLMResponse> {
                 Ok(LLMResponse::text("hello from fake"))
             }
-            fn default_model(&self) -> &str { "fake" }
-            fn name(&self) -> &str { "fake" }
+            fn default_model(&self) -> &str {
+                "fake"
+            }
+            fn name(&self) -> &str {
+                "fake"
+            }
         }
 
         let provider = FakeProvider;
