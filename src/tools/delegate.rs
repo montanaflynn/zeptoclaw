@@ -144,10 +144,8 @@ impl Tool for DelegateTool {
             .get("task")
             .and_then(|v| v.as_str())
             .ok_or_else(|| ZeptoError::Tool("Missing required 'task' argument".into()))?;
-        let tool_override: Option<Vec<String>> = args
-            .get("tools")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
+        let tool_override: Option<Vec<String>> =
+            args.get("tools").and_then(|v| v.as_array()).map(|arr| {
                 arr.iter()
                     .filter_map(|v| v.as_str().map(String::from))
                     .collect()

@@ -60,7 +60,7 @@ src/
 ├── security/       # Shell blocklist, path validation, mount policy
 ├── session/        # Session and message persistence
 ├── skills/         # Markdown-based skill system (loader, types)
-├── tools/          # Agent tools (13 tools)
+├── tools/          # Agent tools (14 tools)
 │   ├── shell.rs       # Shell execution with runtime isolation
 │   ├── filesystem.rs  # Read, write, list, edit files
 │   ├── web.rs         # Web search (Brave) and fetch with SSRF protection
@@ -70,6 +70,7 @@ src/
 │   ├── memory.rs      # Workspace memory get/search
 │   ├── cron.rs        # Cron job scheduling
 │   ├── spawn.rs       # Background task delegation
+│   ├── delegate.rs    # Agent swarm delegation (DelegateTool)
 │   └── r8r.rs         # R8r workflow integration
 ├── utils/          # Utility functions (sanitize tool results)
 ├── error.rs        # Error types (ZeptoError)
@@ -103,7 +104,7 @@ Message input channels via `Channel` trait:
 - CLI mode via direct agent invocation
 
 ### Tools (`src/tools/`)
-13 tools via `Tool` async trait. All filesystem tools require workspace.
+14 tools via `Tool` async trait. All filesystem tools require workspace.
 
 ### Security (`src/security/`)
 - `shell.rs` - Regex-based command blocklist
@@ -151,13 +152,13 @@ cargo build --release
 ## Testing
 
 ```bash
-# Unit tests (471 tests)
+# Unit tests (483 tests)
 cargo test --lib
 
-# Integration tests (56 tests)
+# Integration tests (60 tests)
 cargo test --test integration
 
-# All tests (527 total)
+# All tests (543 total)
 cargo test
 
 # Specific test

@@ -581,22 +581,13 @@ impl Default for SwarmConfig {
 }
 
 /// A pre-defined sub-agent role with system prompt and tool whitelist.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct SwarmRole {
     /// System prompt for this role.
     pub system_prompt: String,
     /// Allowed tool names (empty = all minus delegate/spawn).
     pub tools: Vec<String>,
-}
-
-impl Default for SwarmRole {
-    fn default() -> Self {
-        Self {
-            system_prompt: String::new(),
-            tools: Vec::new(),
-        }
-    }
 }
 
 // ============================================================================

@@ -1080,16 +1080,10 @@ async fn test_delegate_tool_recursion_blocking() {
     // Should block when called from delegate context (recursion prevention)
     let ctx = ToolContext::new().with_channel("delegate", "sub-1");
     let result = tool
-        .execute(
-            serde_json::json!({"role": "Test", "task": "hello"}),
-            &ctx,
-        )
+        .execute(serde_json::json!({"role": "Test", "task": "hello"}), &ctx)
         .await;
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("recursion"));
+    assert!(result.unwrap_err().to_string().contains("recursion"));
 }
 
 #[tokio::test]
@@ -1106,16 +1100,10 @@ async fn test_delegate_tool_disabled_config() {
     let tool = DelegateTool::new(config, provider, bus);
     let ctx = ToolContext::new().with_channel("telegram", "chat-1");
     let result = tool
-        .execute(
-            serde_json::json!({"role": "Test", "task": "hello"}),
-            &ctx,
-        )
+        .execute(serde_json::json!({"role": "Test", "task": "hello"}), &ctx)
         .await;
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("disabled"));
+    assert!(result.unwrap_err().to_string().contains("disabled"));
 }
 
 #[tokio::test]
