@@ -34,6 +34,7 @@ use zeptoclaw::skills::SkillsLoader;
 use zeptoclaw::tools::cron::CronTool;
 use zeptoclaw::tools::filesystem::{EditFileTool, ListDirTool, ReadFileTool, WriteFileTool};
 use zeptoclaw::tools::shell::ShellTool;
+use zeptoclaw::tools::delegate::DelegateTool;
 use zeptoclaw::tools::spawn::SpawnTool;
 use zeptoclaw::tools::{
     EchoTool, GoogleSheetsTool, MemoryGetTool, MemorySearchTool, MessageTool, R8rTool,
@@ -969,6 +970,22 @@ Enable runtime.allow_fallback_to_native to opt in to native fallback.",
             "Configured provider(s) not yet supported by runtime: {}",
             unsupported.join(", ")
         );
+    }
+
+    // Register DelegateTool for agent swarm delegation (requires provider)
+    if config.swarm.enabled {
+        if let Some(provider) = agent.provider().await {
+            agent
+                .register_tool(Box::new(DelegateTool::new(
+                    config.clone(),
+                    provider,
+                    agent.bus().clone(),
+                )))
+                .await;
+            info!("Registered delegate tool (swarm)");
+        } else {
+            warn!("Swarm enabled but no provider configured — delegate tool not registered");
+        }
     }
 
     Ok(agent)

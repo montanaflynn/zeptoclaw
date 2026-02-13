@@ -670,6 +670,12 @@ impl AgentLoop {
     pub fn config(&self) -> &Config {
         &self.config
     }
+
+    /// Get a clone of the current LLM provider Arc, if configured.
+    pub async fn provider(&self) -> Option<Arc<dyn LLMProvider>> {
+        let guard = self.provider.read().await;
+        guard.clone()
+    }
 }
 
 #[cfg(test)]
