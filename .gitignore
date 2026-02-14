@@ -21,6 +21,13 @@ target/
 # OS
 .DS_Store
 
+# AI tools
+.claude/
+.kimi/
+.cursor/
+.aider*
+.codex/
+
 # External references
 external/
 
