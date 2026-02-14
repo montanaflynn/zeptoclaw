@@ -32,7 +32,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::error::{Result, ZeptoError};
 
@@ -60,12 +60,23 @@ impl R8rTool {
     /// # Arguments
     /// * `endpoint` - The r8r server endpoint (e.g., "http://localhost:8080")
     pub fn new(endpoint: &str) -> Self {
+        let client = match Client::builder()
+            .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
+            .build()
+        {
+            Ok(client) => client,
+            Err(error) => {
+                warn!(
+                    %error,
+                    "Failed to build configured R8r HTTP client; falling back to default client"
+                );
+                Client::new()
+            }
+        };
+
         Self {
             endpoint: endpoint.trim_end_matches('/').to_string(),
-            client: Client::builder()
-                .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-                .build()
-                .expect("Failed to build HTTP client"),
+            client,
         }
     }
 

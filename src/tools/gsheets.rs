@@ -12,6 +12,7 @@ use super::{Tool, ToolContext};
 const SHEETS_API_BASE: &str = "https://sheets.googleapis.com/v4/spreadsheets";
 
 /// Tool for reading/writing Google Sheets ranges.
+#[derive(Debug)]
 pub struct GoogleSheetsTool {
     client: Client,
     access_token: String,
@@ -399,5 +400,142 @@ mod tests {
         assert_eq!(encode_range("a+b"), "a%2Bb");
         // Plain range (no encoding needed)
         assert_eq!(encode_range("A1:B2"), "A1:B2");
+    }
+
+    // ==================== ADDITIONAL ERROR/SECURITY TESTS ====================
+
+    #[tokio::test]
+    async fn test_unknown_action_rejected() {
+        let tool = GoogleSheetsTool::new("token");
+        let ctx = ToolContext::new();
+
+        let result = tool
+            .execute(
+                json!({
+                    "spreadsheet_id": "abc123",
+                    "action": "delete",
+                    "range": "A1:B2"
+                }),
+                &ctx,
+            )
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Unknown action 'delete'"),
+            "Expected unknown action error, got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_missing_spreadsheet_id() {
+        let tool = GoogleSheetsTool::new("token");
+        let ctx = ToolContext::new();
+
+        let result = tool
+            .execute(
+                json!({
+                    "action": "read",
+                    "range": "A1:B2"
+                }),
+                &ctx,
+            )
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Missing 'spreadsheet_id'"),
+            "Expected missing spreadsheet_id error, got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_missing_range() {
+        let tool = GoogleSheetsTool::new("token");
+        let ctx = ToolContext::new();
+
+        let result = tool
+            .execute(
+                json!({
+                    "spreadsheet_id": "abc123",
+                    "action": "read"
+                }),
+                &ctx,
+            )
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Missing 'range'"),
+            "Expected missing range error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_extract_values_malformed_row() {
+        // Each row must be an array; a string should be rejected
+        let result = GoogleSheetsTool::extract_values(&json!({
+            "values": ["not-an-array", "also-not"]
+        }));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Each row must be an array"),
+            "Expected row format error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_extract_values_missing_values_key() {
+        let result = GoogleSheetsTool::extract_values(&json!({"data": [["A"]]}));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Missing 'values'"),
+            "Expected missing values error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_from_service_account_invalid_base64() {
+        let result = GoogleSheetsTool::from_service_account("not-valid-base64!!!");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Invalid base64"),
+            "Expected base64 error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_from_service_account_empty_access_token() {
+        // access_token present but empty string
+        let payload =
+            base64::engine::general_purpose::STANDARD.encode(r#"{"access_token": "  "}"#);
+        let result = GoogleSheetsTool::from_service_account(&payload);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("non-empty 'access_token'"),
+            "Expected empty token error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_validate_spreadsheet_id_path_injection_with_colon() {
+        // Colons, percent-encoding, and other URL-significant characters
+        assert!(validate_spreadsheet_id("id:values").is_err());
+        assert!(validate_spreadsheet_id("id%2Fvalues").is_err());
+        assert!(validate_spreadsheet_id("id\ninjection").is_err());
     }
 }

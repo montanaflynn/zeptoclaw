@@ -250,3 +250,228 @@ impl CronTool {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bus::MessageBus;
+    use crate::cron::CronService;
+    use tempfile::tempdir;
+
+    /// Helper: create a CronTool backed by a temp-dir CronService.
+    fn make_cron_tool() -> CronTool {
+        let temp = tempdir().expect("failed to create temp dir");
+        let bus = Arc::new(MessageBus::new());
+        let service = Arc::new(CronService::new(temp.path().join("jobs.json"), bus));
+        CronTool::new(service)
+    }
+
+    /// Helper: build a ToolContext with channel and chat_id set.
+    fn ctx_with_channel() -> ToolContext {
+        ToolContext::new().with_channel("telegram", "chat_42")
+    }
+
+    // ---- metadata tests ----
+
+    #[test]
+    fn test_cron_tool_name() {
+        let tool = make_cron_tool();
+        assert_eq!(tool.name(), "cron");
+    }
+
+    #[test]
+    fn test_cron_tool_description() {
+        let tool = make_cron_tool();
+        assert!(tool.description().contains("Schedule"));
+        assert!(tool.description().contains("add"));
+        assert!(tool.description().contains("list"));
+        assert!(tool.description().contains("remove"));
+    }
+
+    #[test]
+    fn test_cron_tool_parameters_schema() {
+        let tool = make_cron_tool();
+        let params = tool.parameters();
+
+        assert_eq!(params["type"], "object");
+        assert!(params["properties"]["action"].is_object());
+        assert!(params["properties"]["message"].is_object());
+        assert!(params["properties"]["every_seconds"].is_object());
+        assert!(params["properties"]["cron_expr"].is_object());
+        assert!(params["properties"]["at"].is_object());
+        assert!(params["properties"]["job_id"].is_object());
+        assert_eq!(params["required"], json!(["action"]));
+    }
+
+    // ---- execute tests ----
+
+    #[tokio::test]
+    async fn test_execute_missing_action() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool.execute(json!({}), &ctx).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Missing 'action'"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_invalid_action() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool.execute(json!({"action": "restart"}), &ctx).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Unknown cron action 'restart'"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_add_missing_message() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool
+            .execute(
+                json!({"action": "add", "every_seconds": 120}),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Missing 'message'"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_add_no_schedule() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        // Provide a message but no schedule type at all.
+        let result = tool
+            .execute(json!({"action": "add", "message": "hello"}), &ctx)
+            .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Specify exactly one"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_add_multiple_schedules() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool
+            .execute(
+                json!({
+                    "action": "add",
+                    "message": "hello",
+                    "every_seconds": 120,
+                    "cron_expr": "*/5 * * * *"
+                }),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Specify exactly one"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_add_interval_too_short() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool
+            .execute(
+                json!({
+                    "action": "add",
+                    "message": "ping",
+                    "every_seconds": 10
+                }),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Minimum interval is 60 seconds"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_add_every_seconds_success() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool
+            .execute(
+                json!({
+                    "action": "add",
+                    "message": "heartbeat",
+                    "every_seconds": 120
+                }),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("Created cron job"));
+        assert!(output.contains("heartbeat"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_list_empty() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool.execute(json!({"action": "list"}), &ctx).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "No scheduled jobs");
+    }
+
+    #[tokio::test]
+    async fn test_execute_remove_missing_job_id() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool.execute(json!({"action": "remove"}), &ctx).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Missing 'job_id'"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_remove_nonexistent_job() {
+        let tool = make_cron_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool
+            .execute(
+                json!({"action": "remove", "job_id": "no_such_id"}),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_add_no_channel_in_context() {
+        let tool = make_cron_tool();
+        let ctx = ToolContext::new(); // no channel or chat_id
+
+        let result = tool
+            .execute(
+                json!({
+                    "action": "add",
+                    "message": "test",
+                    "every_seconds": 120
+                }),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("No channel available"));
+    }
+}

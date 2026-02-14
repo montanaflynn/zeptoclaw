@@ -125,3 +125,150 @@ impl Tool for SpawnTool {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bus::MessageBus;
+
+    /// Helper: create a SpawnTool with a null agent (Weak::new()) and real MessageBus.
+    fn make_spawn_tool() -> SpawnTool {
+        let bus = Arc::new(MessageBus::new());
+        SpawnTool::new(Weak::new(), bus)
+    }
+
+    /// Helper: ToolContext with channel + chat_id set.
+    fn ctx_with_channel() -> ToolContext {
+        ToolContext::new().with_channel("telegram", "chat_99")
+    }
+
+    // ---- metadata tests ----
+
+    #[test]
+    fn test_spawn_tool_name() {
+        let tool = make_spawn_tool();
+        assert_eq!(tool.name(), "spawn");
+    }
+
+    #[test]
+    fn test_spawn_tool_description() {
+        let tool = make_spawn_tool();
+        let desc = tool.description();
+        assert!(desc.contains("background"));
+        assert!(desc.contains("task"));
+    }
+
+    #[test]
+    fn test_spawn_tool_parameters_schema() {
+        let tool = make_spawn_tool();
+        let params = tool.parameters();
+
+        assert_eq!(params["type"], "object");
+        assert!(params["properties"]["task"].is_object());
+        assert_eq!(params["properties"]["task"]["type"], "string");
+        assert!(params["properties"]["label"].is_object());
+        assert_eq!(params["required"], json!(["task"]));
+    }
+
+    // ---- execute tests ----
+
+    #[tokio::test]
+    async fn test_execute_missing_task() {
+        let tool = make_spawn_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool.execute(json!({}), &ctx).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Missing 'task'"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_rejects_recursive_spawn() {
+        let tool = make_spawn_tool();
+        // Simulate being called from within a spawned sub-agent.
+        let ctx = ToolContext::new().with_channel("subagent", "sub_1");
+
+        let result = tool
+            .execute(json!({"task": "do something"}), &ctx)
+            .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Cannot spawn from within a spawned task"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_no_channel_in_context() {
+        let tool = make_spawn_tool();
+        let ctx = ToolContext::new(); // no channel/chat_id
+
+        let result = tool
+            .execute(json!({"task": "summarize report"}), &ctx)
+            .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("No channel available"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_no_chat_id_in_context() {
+        let tool = make_spawn_tool();
+        // Set channel but not chat_id.
+        let mut ctx = ToolContext::new();
+        ctx.channel = Some("telegram".to_string());
+        // chat_id stays None
+
+        let result = tool
+            .execute(json!({"task": "some work"}), &ctx)
+            .await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("No chat_id available"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_success_returns_task_id() {
+        let tool = make_spawn_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool
+            .execute(json!({"task": "analyze logs"}), &ctx)
+            .await;
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("Spawned background task"));
+        assert!(output.contains("analyze logs"));
+        assert!(output.contains("id:"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_custom_label() {
+        let tool = make_spawn_tool();
+        let ctx = ctx_with_channel();
+
+        let result = tool
+            .execute(
+                json!({"task": "analyze logs for errors", "label": "log-check"}),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("log-check"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_long_task_auto_truncated_label() {
+        let tool = make_spawn_tool();
+        let ctx = ctx_with_channel();
+
+        let long_task = "a]".repeat(40); // 80 chars, exceeds 30-char threshold
+        let result = tool
+            .execute(json!({"task": long_task}), &ctx)
+            .await;
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        // The auto-label should be truncated with "..."
+        assert!(output.contains("..."));
+    }
+}

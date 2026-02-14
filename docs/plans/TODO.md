@@ -44,55 +44,82 @@ After completing any feature, update these 3 files:
 
 ### Wiring (2026-02-14)
 - [x] Config fields for retry/fallback (`config/types.rs`, `config/mod.rs` env overrides)
-- [x] RetryProvider wired into provider resolution (`main.rs`) — base → fallback → retry stack
+- [x] RetryProvider wired into provider resolution — base → fallback → retry stack
 - [x] FallbackProvider wired with multi-provider resolution (`providers/registry.rs`)
 - [x] MetricsCollector wired into AgentLoop — tracks tool duration/success + token usage
 - [x] Status output shows retry/fallback state
 
 ### Agent Loop / CLI Wiring (2026-02-14)
-- [x] ConversationHistory CLI commands — `history list`, `history show <query>`, `history cleanup` in `main.rs`
+- [x] ConversationHistory CLI commands — `history list`, `history show <query>`, `history cleanup`
 - [x] TokenBudget wired — `token_budget` config field + env override + budget check in agent loop
 - [x] OutputFormat wired — `output_format` field on `ChatOptions` + OpenAI `response_format` + Claude system suffix
 - [x] LongTermMemory tool — `longterm_memory` agent tool (set/get/search/delete/list/categories), 22 tests
 
-## Backlog — Next Features
+### Features (2026-02-14)
+- [x] **Conversation persistence** (`src/session/history.rs`) — 12 tests
+- [x] **Token budget** (`src/agent/budget.rs`) — 18 tests
+- [x] **Structured output** (`src/providers/structured.rs`) — 19 tests
+- [x] **Multi-turn memory** (`src/memory/longterm.rs`) — 19 tests
+- [x] **Webhook channel** (`src/channels/webhook.rs`) — 28 tests
+- [x] **Discord channel** (`src/channels/discord.rs`) — 27 tests
+- [x] **Tool approval** (`src/tools/approval.rs`) — 24 tests
+- [x] **Agent templates** (`src/config/templates.rs`) — 21 tests
+- [x] **Plugin system** (`src/plugins/`) — 70+ tests
+- [x] **Telemetry export** (`src/utils/telemetry.rs`) — 13 tests
+- [x] **Cost tracking** (`src/utils/cost.rs`) — 18 tests
+- [x] **Batch mode** (`src/batch.rs`) — 15+ tests
+- [x] **Hooks system** (`src/hooks/mod.rs`) — config-driven before_tool/after_tool/on_error, 17 tests
+- [x] **Deploy templates** (`deploy/`) — Docker single/multi, Fly.io, Railway, Render
 
-### High Priority (2026-02-14)
-- [x] **Conversation persistence** (`src/session/history.rs`) — CLI session discovery, listing, search, cleanup (12 tests)
-- [x] **Token budget / rate limiting** (`src/agent/budget.rs`) — atomic per-session token budget tracker (18 tests)
-- [x] **Structured output** (`src/providers/structured.rs`) — OutputFormat enum (Text/Json/JsonSchema) with provider helpers (19 tests)
-- [x] **Multi-turn memory** (`src/memory/longterm.rs`) — persistent key-value store with categories, tags, access tracking (19 tests)
+---
 
-### Medium Priority (2026-02-14)
-- [x] **Webhook channel** (`src/channels/webhook.rs`) — HTTP POST inbound channel with auth, wired in factory (28 tests)
-- [x] **Discord channel** (`src/channels/discord.rs`) — Gateway WebSocket + REST messaging, wired in factory (27 tests)
-- [x] **Tool approval mode** (`src/tools/approval.rs`) — ApprovalGate with policy-based tool gating (24 tests)
-- [x] **Agent templates** (`src/config/templates.rs`) — 4 built-in templates + JSON file loading (21 tests)
-- [x] **Plugin system** (`src/plugins/`) — JSON manifest plugins with command templates, discovery, validation (70+ tests)
+## Backlog
 
-### Deep Wiring (2026-02-14)
-- [x] **Tool approval wired** — `ApprovalConfig` on `Config`, `ApprovalGate` checked before each tool execution in agent loop
-- [x] **Agent templates wired** — `template list`, `template show` CLI commands, `agent --template <name>` flag, system prompt + config overrides
-- [x] **Plugin system wired** — `PluginConfig` on `Config`, `PluginTool` adapter (Tool trait), plugin discovery + registration in `create_agent()`
-- [x] **Webhook channel wired** — `WebhookConfig` on `ChannelsConfig`, registered in factory with bind/port/auth/allowlist
+### P0 — CI/CD & Infrastructure
+- [x] **GitHub Actions CI** — `.github/workflows/ci.yml` with test, clippy, fmt jobs
+- [x] **Release workflow** — `.github/workflows/release.yml` cross-compile 4 targets, GitHub Release with sha256
+- [x] **Docker image CI** — `.github/workflows/docker.yml` build + push to ghcr.io on tag
 
-### Low Priority (2026-02-14)
-- [x] **Telemetry export** (`src/utils/telemetry.rs`) — Prometheus text exposition + JSON renderers, TelemetryConfig (13 tests)
-- [x] **Cost tracking** (`src/utils/cost.rs`) — model pricing tables, CostTracker with per-provider/model accumulation, CostConfig (18 tests)
-- [x] **Batch mode** (`src/batch.rs`) — load prompts from file (text/jsonl), BatchResult, format output (text/jsonl), CLI command (15+ tests)
+### P1 — Test Coverage Gaps
+- [x] **Discord channel tests** — 19 new tests: config serde, gateway payloads, outbound truncation, intents bitmask, edge cases (46 total)
+- [x] **CronTool tests** — 14 new tests: add/list/remove actions, validation, error paths
+- [x] **SpawnTool tests** — 10 new tests: delegation, recursion blocking, labels, error paths
+- [x] **Filesystem security tests** — 5 new tests: path traversal, URL-encoded bypass, workspace boundary, absolute path rejection
+- [x] **Web tool SSRF tests** — 7 new tests: private IP ranges, IPv6, non-HTTP schemes, body size limits, no-host URLs
+- [x] **GSheets error path tests** — 7 new tests: unknown action, missing args, malformed values, base64 errors, path injection
+- [ ] **Integration test expansion** — multi-provider fallback, cron scheduling, heartbeat triggers, skills loader (`tests/integration.rs`) (~2 hrs)
 
-### Low Priority Wiring (2026-02-14)
-- [x] **Telemetry wired** — `TelemetryConfig` on `Config`, added to KNOWN_TOP_LEVEL in validate.rs
-- [x] **Cost tracking wired** — `CostConfig` on `Config`, added to KNOWN_TOP_LEVEL in validate.rs
-- [x] **Batch mode wired** — `BatchConfig` on `Config`, `batch` CLI command with --input/--output/--format/--stop-on-error/--stream/--template flags
+### P2 — Code Quality
+- [x] **R8rTool error handling** — already uses match + warn! + fallback (not .expect()), no change needed
+- [x] **README provider count** — updated to clarify "Anthropic and OpenAI today" + staged rollout for others
+- [x] **README hooks status** — updated from "wiring in progress" to "fully wired into agent loop"
+- [x] **Update stats** — 952 lib + 63 integration + 98 doc = 1,113 total tests; 17 tools; hooks system fully wired
 
-### Nice-to-Have
-- [ ] **Web UI** — browser-based chat interface
+### P3 — Documentation
+- [x] **Module-level docs** — all four files already have `//!` module docs (plugins, hooks, batch, telemetry)
+- [x] **Public API docs** — `generate_env_file_content()` already has doc comment; others renamed/removed
+- [x] **Deployment guide** — `deploy/README.md` with step-by-step for Docker, Fly.io, Railway, Render
+
+### P4 — Features
+- [ ] **Web UI** — browser-based chat interface (minimal: single HTML page with SSE)
+- [ ] **Embeddings memory** — vector search for long-term memory (inspired by Moltis)
+- [ ] **Hook notify action** — wire `Notify` hook action to actually send messages via bus (currently logs only)
+- [ ] **Pre-commit hooks** — `cargo fmt` + `cargo clippy` enforcement via `.git/hooks/pre-commit`
+
+### P5 — Repo Hygiene
+- [ ] **Remove `landing/r8r/docs/node_modules/`** from disk or ensure fully gitignored
+- [ ] **Audit `.clone()` calls** — 233 across codebase, most necessary but worth a pass for unnecessary string clones
+- [ ] **Clean up docs/internal/** — verify competitor research is properly gitignored
+
+---
 
 ## Stats
 
-- Codebase: ~38,000+ lines of Rust
-- Tests: ~876 lib + 63 integration + 97 doc = ~1036 total
-- Tools: 15 agent tools + plugin tools (dynamic)
+- Codebase: ~39,000 lines of Rust
+- Tests: 952 lib + 63 integration + 98 doc = **1,113 total**
+- Tools: 17 agent tools + dynamic plugin tools
 - Channels: 4 (Telegram, Slack, Discord, Webhook)
 - Providers: 2 (Claude, OpenAI) + RetryProvider + FallbackProvider
+- Hooks: 3 points (before_tool, after_tool, on_error)
+- Deploy targets: 5 (Docker single, Docker multi, Fly.io, Railway, Render)
+- Binary: ~5.3MB release (opt-level="z", lto, strip)

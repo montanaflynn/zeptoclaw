@@ -6,7 +6,7 @@
   <strong>AI assistant framework that fits in 5 megabytes.</strong>
 </p>
 <p align="center">
-  16+ tools &bull; 7 LLM providers &bull; container isolation &bull; multi-tenant &bull; written in Rust
+  16+ tools &bull; runtime providers: Anthropic + OpenAI &bull; container isolation &bull; multi-tenant &bull; written in Rust
 </p>
 <p align="center">
   <a href="#quick-start">Quick Start</a> &bull;
@@ -29,7 +29,7 @@ $ zeptoclaw agent "Set up my project workspace"
 
 → Created workspace at ~/.zeptoclaw/workspace
 → Found 40+ Rust source files across 17 modules
-→ Providers: Anthropic, OpenAI, Gemini, Groq + 3 more
+→ Providers: Anthropic + OpenAI (runtime), OpenRouter/Groq/Zhipu/VLLM/Gemini (registry)
 → Tools: shell, filesystem, web, memory, cron, whatsapp + 10 more
 
 ✓ Workspace ready in 1.2s
@@ -70,7 +70,7 @@ zeptoclaw gateway --containerized
 
 ## Features
 
-**Multi-Provider LLM** — Switch between Claude, GPT-4, Gemini, Groq, OpenRouter, Zhipu, and VLLM. Provider registry with priority-based fallback. Bring your own API key.
+**Multi-Provider LLM** — Runtime execution supports Anthropic and OpenAI today. Provider registry/config entries also include OpenRouter, Groq, Zhipu, VLLM, and Gemini for staged rollout.
 
 **16+ Built-in Tools** — Shell, filesystem, web search, web fetch, memory, cron scheduling, spawn, WhatsApp, Google Sheets, and more. Extend with the `Tool` trait in ~50 lines of Rust.
 
@@ -78,7 +78,7 @@ zeptoclaw gateway --containerized
 
 **Multi-Channel Gateway** — Implemented channels: Telegram, Slack, Discord, and Webhook (+ CLI mode). Channel factory with per-channel configuration and unified message bus.
 
-**Hooks (Config + Engine)** — Hook configuration and engine are available for `before_tool`, `after_tool`, and `on_error`. Agent-loop enforcement wiring is in progress.
+**Hooks System** — Config-driven hooks with `before_tool`, `after_tool`, and `on_error` points. Supports Log, Block, and Notify actions with tool and channel pattern matching. Fully wired into the agent loop.
 
 **Memory & Sessions** — Long-running conversations with context. Persistent memory search and retrieval. Sessions survive restarts.
 
@@ -137,7 +137,7 @@ src/
 ├── health/      Health endpoints, usage metrics
 ├── heartbeat/   Periodic background tasks
 ├── memory/      Workspace memory (markdown-based)
-├── providers/   Claude, OpenAI + 5 more via registry
+├── providers/   Claude + OpenAI runtime, additional providers in registry
 ├── runtime/     Native, Docker, Apple Container
 ├── security/    Shell blocklist, path validation, SSRF prevention
 ├── session/     Session and message persistence

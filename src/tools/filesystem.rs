@@ -750,4 +750,101 @@ mod tests {
 
         assert!(result.is_err());
     }
+
+    // ==================== ADDITIONAL SECURITY/ERROR PATH TESTS ====================
+
+    #[tokio::test]
+    async fn test_write_tool_rejects_traversal_outside_workspace() {
+        let dir = tempdir().unwrap();
+        let tool = WriteFileTool;
+        let ctx = ToolContext::new().with_workspace(dir.path().to_str().unwrap());
+
+        let result = tool
+            .execute(
+                json!({"path": "../../etc/shadow", "content": "pwned"}),
+                &ctx,
+            )
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Security violation") || err.contains("traversal"),
+            "Expected security error, got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_dir_rejects_absolute_outside_workspace() {
+        let dir = tempdir().unwrap();
+        let tool = ListDirTool;
+        let ctx = ToolContext::new().with_workspace(dir.path().to_str().unwrap());
+
+        let result = tool.execute(json!({"path": "/etc"}), &ctx).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Security violation") || err.contains("escapes workspace"),
+            "Expected security error, got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_edit_tool_rejects_no_workspace() {
+        let tool = EditFileTool;
+        let ctx = ToolContext::new(); // No workspace configured
+
+        let result = tool
+            .execute(
+                json!({
+                    "path": "/tmp/test.txt",
+                    "old_text": "a",
+                    "new_text": "b"
+                }),
+                &ctx,
+            )
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Workspace not configured"),
+            "Expected workspace error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_resolve_path_blocks_url_encoded_traversal() {
+        let dir = tempdir().unwrap();
+        let ctx = ToolContext::new().with_workspace(dir.path().to_str().unwrap());
+
+        // URL-encoded ".." should be caught by the traversal pattern checker
+        let result = resolve_path("%2e%2e/etc/passwd", &ctx);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Security violation") || err.contains("traversal"),
+            "Expected security error for URL-encoded traversal, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_resolve_path_blocks_double_encoded_traversal() {
+        let dir = tempdir().unwrap();
+        let ctx = ToolContext::new().with_workspace(dir.path().to_str().unwrap());
+
+        // Double URL-encoded ".." (%252e%252e) should be caught
+        let result = resolve_path("%252e%252e/etc/passwd", &ctx);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Security violation") || err.contains("traversal"),
+            "Expected security error for double-encoded traversal, got: {}",
+            err
+        );
+    }
 }

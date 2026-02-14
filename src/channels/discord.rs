@@ -1138,4 +1138,207 @@ mod tests {
             .expect("should extract");
         assert_eq!(interval, 41250);
     }
+
+    // -----------------------------------------------------------------------
+    // 11. DiscordConfig serde deserialization
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_discord_config_deserialize_defaults() {
+        // Only provide `token`; `enabled` and `allow_from` should use serde defaults.
+        let json = r#"{ "token": "bot-abc-123" }"#;
+        let config: DiscordConfig = serde_json::from_str(json).expect("should parse");
+
+        assert!(!config.enabled); // #[serde(default)] -> bool defaults to false
+        assert_eq!(config.token, "bot-abc-123");
+        assert!(config.allow_from.is_empty());
+    }
+
+    #[test]
+    fn test_discord_config_deserialize_full() {
+        let json = r#"{
+            "enabled": true,
+            "token": "tok-full",
+            "allow_from": ["111", "222", "333"]
+        }"#;
+        let config: DiscordConfig = serde_json::from_str(json).expect("should parse");
+
+        assert!(config.enabled);
+        assert_eq!(config.token, "tok-full");
+        assert_eq!(config.allow_from, vec!["111", "222", "333"]);
+    }
+
+    #[test]
+    fn test_discord_config_default_trait() {
+        let config = DiscordConfig::default();
+        assert!(!config.enabled);
+        assert!(config.token.is_empty());
+        assert!(config.allow_from.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // 12. Gateway payload edge cases
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_gateway_payload_minimal_fields() {
+        // Only `op` is required; `d`, `s`, `t` all have serde defaults.
+        let raw = r#"{ "op": 11 }"#;
+        let payload: GatewayPayload = serde_json::from_str(raw).expect("should parse");
+
+        assert_eq!(payload.op, 11);
+        assert!(payload.d.is_none());
+        assert!(payload.s.is_none());
+        assert!(payload.t.is_none());
+    }
+
+    #[test]
+    fn test_gateway_payload_reconnect_opcode() {
+        let raw = r#"{ "op": 7, "d": null }"#;
+        let payload: GatewayPayload = serde_json::from_str(raw).expect("should parse");
+        assert_eq!(payload.op, 7);
+    }
+
+    #[test]
+    fn test_gateway_payload_invalid_session_opcode() {
+        let raw = r#"{ "op": 9, "d": false }"#;
+        let payload: GatewayPayload = serde_json::from_str(raw).expect("should parse");
+        assert_eq!(payload.op, 9);
+        assert_eq!(payload.d, Some(json!(false)));
+    }
+
+    // -----------------------------------------------------------------------
+    // 13. MESSAGE_CREATE edge cases
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_message_create_empty_author_id() {
+        let data = json!({
+            "id": "msg-edge-1",
+            "content": "valid content",
+            "channel_id": "ch-100",
+            "author": { "id": "  ", "bot": false }
+        });
+
+        let result = DiscordChannel::parse_message_create(&data, &[]);
+        // Empty (whitespace-only) sender_id should be rejected.
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_message_create_missing_content_field() {
+        // `content` has `#[serde(default)]`, so omitting it yields "".
+        let data = json!({
+            "id": "msg-edge-2",
+            "channel_id": "ch-200",
+            "author": { "id": "user-42", "bot": false }
+        });
+
+        let result = DiscordChannel::parse_message_create(&data, &[]);
+        // Empty content should be filtered out.
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_message_create_empty_channel_id() {
+        let data = json!({
+            "id": "msg-edge-3",
+            "content": "hello",
+            "channel_id": "  ",
+            "author": { "id": "user-42", "bot": false }
+        });
+
+        let result = DiscordChannel::parse_message_create(&data, &[]);
+        // Empty (whitespace-only) channel_id should be rejected.
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_message_create_content_trimmed() {
+        let data = json!({
+            "id": "msg-trim",
+            "content": "  padded message  ",
+            "channel_id": "ch-100",
+            "author": { "id": "user-1" }
+        });
+
+        let inbound = DiscordChannel::parse_message_create(&data, &[]).unwrap();
+        assert_eq!(inbound.content, "padded message");
+    }
+
+    // -----------------------------------------------------------------------
+    // 14. HelloData direct deserialization
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_hello_data_deserialization() {
+        let data: HelloData = serde_json::from_value(json!({
+            "heartbeat_interval": 45000
+        }))
+        .expect("should parse");
+        assert_eq!(data.heartbeat_interval, 45000);
+    }
+
+    #[test]
+    fn test_hello_data_extra_fields_ignored() {
+        // Serde should ignore unknown fields by default (deny_unknown_fields not set).
+        let data: HelloData = serde_json::from_value(json!({
+            "heartbeat_interval": 30000,
+            "_trace": ["gateway-1"]
+        }))
+        .expect("should parse with extra fields");
+        assert_eq!(data.heartbeat_interval, 30000);
+    }
+
+    // -----------------------------------------------------------------------
+    // 15. Outbound truncation boundary
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_outbound_message_exactly_at_limit() {
+        // A message of exactly DISCORD_MAX_MESSAGE_LENGTH should NOT be truncated.
+        let exact_content = "a".repeat(DISCORD_MAX_MESSAGE_LENGTH);
+        let msg = OutboundMessage::new("discord", "ch-100", &exact_content);
+        let payload = DiscordChannel::build_send_payload(&msg).expect("should build");
+
+        let content = payload["content"].as_str().unwrap();
+        assert_eq!(content.len(), DISCORD_MAX_MESSAGE_LENGTH);
+        assert!(!content.ends_with("..."));
+    }
+
+    #[test]
+    fn test_outbound_message_one_over_limit() {
+        // A message of DISCORD_MAX_MESSAGE_LENGTH + 1 SHOULD be truncated.
+        let over_content = "b".repeat(DISCORD_MAX_MESSAGE_LENGTH + 1);
+        let msg = OutboundMessage::new("discord", "ch-100", &over_content);
+        let payload = DiscordChannel::build_send_payload(&msg).expect("should build");
+
+        let content = payload["content"].as_str().unwrap();
+        assert!(content.len() <= DISCORD_MAX_MESSAGE_LENGTH);
+        assert!(content.ends_with("..."));
+    }
+
+    // -----------------------------------------------------------------------
+    // 16. Gateway intents bitmask sanity
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_gateway_intents_bitmask() {
+        // GUILDS (1 << 0) = 1
+        // GUILD_MESSAGES (1 << 9) = 512
+        // MESSAGE_CONTENT (1 << 15) = 32768
+        // Total = 33281
+        assert_eq!(GATEWAY_INTENTS, 1 + 512 + 32768);
+        assert_eq!(GATEWAY_INTENTS, 33281);
+    }
+
+    // -----------------------------------------------------------------------
+    // 17. Identify payload includes OS
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_identify_payload_has_os() {
+        let payload_str = DiscordChannel::build_identify_payload("tok");
+        let payload: Value = serde_json::from_str(&payload_str).expect("valid JSON");
+
+        let os_val = payload["d"]["properties"]["os"]
+            .as_str()
+            .expect("os field should be a string");
+        // The OS field should be populated with the compile-time constant.
+        assert_eq!(os_val, std::env::consts::OS);
+        assert!(!os_val.is_empty());
+    }
 }

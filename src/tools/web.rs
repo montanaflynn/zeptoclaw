@@ -657,4 +657,151 @@ mod tests {
         let ipv6_link_local = Url::parse("http://[fe80::1]/").unwrap();
         assert!(is_blocked_host(&ipv6_link_local));
     }
+
+    // ==================== ADDITIONAL SSRF / SECURITY TESTS ====================
+
+    #[test]
+    fn test_private_ip_10_range_blocked() {
+        let ip: IpAddr = "10.0.0.1".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(ip),
+            "10.0.0.0/8 range should be detected as private"
+        );
+
+        let ip2: IpAddr = "10.255.255.255".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(ip2),
+            "10.255.255.255 should be detected as private"
+        );
+    }
+
+    #[test]
+    fn test_private_ip_172_range_blocked() {
+        let ip: IpAddr = "172.16.0.1".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(ip),
+            "172.16.0.0/12 range should be detected as private"
+        );
+
+        let ip_end: IpAddr = "172.31.255.255".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(ip_end),
+            "172.31.255.255 should be detected as private"
+        );
+
+        // 172.32.x.x is NOT private -- ensure no false positive
+        let public: IpAddr = "172.32.0.1".parse().unwrap();
+        assert!(
+            !is_private_or_local_ip(public),
+            "172.32.0.1 should NOT be detected as private"
+        );
+    }
+
+    #[test]
+    fn test_unspecified_and_broadcast_blocked() {
+        let unspecified: IpAddr = "0.0.0.0".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(unspecified),
+            "0.0.0.0 should be blocked"
+        );
+
+        let broadcast: IpAddr = "255.255.255.255".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(broadcast),
+            "255.255.255.255 should be blocked"
+        );
+
+        // Addresses starting with 0 (e.g., 0.1.2.3) should be blocked
+        let zero_prefix: IpAddr = "0.1.2.3".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(zero_prefix),
+            "0.x.x.x should be blocked"
+        );
+    }
+
+    #[test]
+    fn test_ipv6_ula_and_multicast_blocked() {
+        // Unique Local Address (fc00::/7)
+        let ula: IpAddr = "fd00::1".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(ula),
+            "IPv6 ULA (fd00::1) should be blocked"
+        );
+
+        let ula2: IpAddr = "fc00::1".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(ula2),
+            "IPv6 ULA (fc00::1) should be blocked"
+        );
+
+        // Multicast (ff00::/8)
+        let multicast: IpAddr = "ff02::1".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(multicast),
+            "IPv6 multicast should be blocked"
+        );
+
+        // Unspecified
+        let unspecified_v6: IpAddr = "::".parse().unwrap();
+        assert!(
+            is_private_or_local_ip(unspecified_v6),
+            "IPv6 unspecified (::) should be blocked"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_web_fetch_rejects_non_http_schemes() {
+        let tool = WebFetchTool::new();
+        let ctx = ToolContext::new();
+
+        // ftp:// should be rejected
+        let result = tool
+            .execute(json!({"url": "ftp://example.com/file.txt"}), &ctx)
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Only http/https"),
+            "Expected scheme error, got: {}",
+            err
+        );
+
+        // file:// should be rejected
+        let result = tool
+            .execute(json!({"url": "file:///etc/passwd"}), &ctx)
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Only http/https"),
+            "Expected scheme error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_with_max_chars_clamping() {
+        // Below minimum should clamp to MIN_FETCH_CHARS
+        let tool = WebFetchTool::with_max_chars(1);
+        assert_eq!(tool.max_chars, MIN_FETCH_CHARS);
+
+        // Above maximum should clamp to MAX_FETCH_CHARS
+        let tool = WebFetchTool::with_max_chars(999_999_999);
+        assert_eq!(tool.max_chars, MAX_FETCH_CHARS);
+
+        // Within range should be preserved
+        let tool = WebFetchTool::with_max_chars(10_000);
+        assert_eq!(tool.max_chars, 10_000);
+    }
+
+    #[test]
+    fn test_is_blocked_host_no_host() {
+        // A URL with no host should be blocked
+        // data: URLs have no host
+        let no_host = Url::parse("data:text/plain;base64,SGVsbG8=").unwrap();
+        assert!(
+            is_blocked_host(&no_host),
+            "URL with no host should be blocked"
+        );
+    }
 }
