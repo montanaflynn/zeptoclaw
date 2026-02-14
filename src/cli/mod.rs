@@ -4,6 +4,7 @@
 
 pub mod agent;
 pub mod batch;
+pub mod channel;
 pub mod common;
 pub mod config;
 pub mod gateway;
@@ -105,6 +106,11 @@ enum Commands {
     Version,
     /// Show system status
     Status,
+    /// Manage communication channels
+    Channel {
+        #[command(subcommand)]
+        action: ChannelAction,
+    },
     /// Validate configuration file
     Config {
         #[command(subcommand)]
@@ -146,6 +152,22 @@ pub enum AuthAction {
 pub enum ConfigAction {
     /// Check configuration for errors and warnings
     Check,
+}
+
+#[derive(Subcommand)]
+pub enum ChannelAction {
+    /// List all channels and their status
+    List,
+    /// Interactive setup for a channel
+    Setup {
+        /// Channel name (telegram, discord, slack, whatsapp, webhook)
+        channel_name: String,
+    },
+    /// Test channel connectivity
+    Test {
+        /// Channel name (telegram, discord, slack, whatsapp, webhook)
+        channel_name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -258,6 +280,9 @@ pub async fn run() -> Result<()> {
         }
         Some(Commands::Status) => {
             status::cmd_status().await?;
+        }
+        Some(Commands::Channel { action }) => {
+            channel::cmd_channel(action).await?;
         }
         Some(Commands::Config { action }) => {
             config::cmd_config(action).await?;

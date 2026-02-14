@@ -97,6 +97,9 @@ pub(crate) async fn cmd_onboard() -> Result<()> {
     // Configure Telegram channel
     configure_telegram(&mut config)?;
 
+    // Configure WhatsApp channel (via bridge)
+    configure_whatsapp_channel(&mut config)?;
+
     // Configure runtime for shell command isolation
     configure_runtime(&mut config)?;
 
@@ -437,6 +440,53 @@ fn configure_telegram(config: &mut Config) -> Result<()> {
         println!("  Skipped Telegram configuration.");
     }
 
+    Ok(())
+}
+
+/// Configure WhatsApp channel (via whatsmeow-rs bridge).
+fn configure_whatsapp_channel(config: &mut Config) -> Result<()> {
+    println!();
+    println!("WhatsApp Channel Setup (via Bridge)");
+    println!("-----------------------------------");
+    println!("Requires whatsmeow-rs bridge: https://github.com/qhkm/whatsmeow-rs");
+    print!("Enable WhatsApp channel? [y/N]: ");
+    io::stdout().flush()?;
+
+    let enabled = read_line()?.to_ascii_lowercase();
+    if !matches!(enabled.as_str(), "y" | "yes") {
+        println!("  Skipped WhatsApp channel configuration.");
+        return Ok(());
+    }
+
+    let whatsapp_config = config
+        .channels
+        .whatsapp
+        .get_or_insert_with(Default::default);
+    whatsapp_config.enabled = true;
+
+    print!("Bridge WebSocket URL [{}]: ", whatsapp_config.bridge_url);
+    io::stdout().flush()?;
+    let bridge_url = read_line()?;
+    if !bridge_url.is_empty() {
+        whatsapp_config.bridge_url = bridge_url;
+    }
+
+    print!("Phone number allowlist (comma-separated, or Enter for all): ");
+    io::stdout().flush()?;
+    let allowlist = read_line()?;
+    if !allowlist.is_empty() {
+        whatsapp_config.allow_from = allowlist
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+    }
+
+    println!(
+        "  WhatsApp channel configured (bridge: {}).",
+        whatsapp_config.bridge_url
+    );
+    println!("  Run 'zeptoclaw gateway' to start the WhatsApp channel.");
     Ok(())
 }
 

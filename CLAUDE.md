@@ -56,6 +56,11 @@ cargo fmt
 ./target/release/zeptoclaw batch --input prompts.jsonl --output results.jsonl --format jsonl
 ./target/release/zeptoclaw batch --input prompts.txt --template coder --stop-on-error
 
+# Channel management
+./target/release/zeptoclaw channel list
+./target/release/zeptoclaw channel setup whatsapp
+./target/release/zeptoclaw channel test whatsapp
+
 # Onboard (interactive setup)
 ./target/release/zeptoclaw onboard
 ```
@@ -66,16 +71,22 @@ cargo fmt
 src/
 ├── agent/          # Agent loop, context builder, token budget, context compaction
 ├── bus/            # Async message bus (pub/sub)
-├── channels/       # Input channels (Telegram, Slack, CLI)
+├── channels/       # Input channels (Telegram, Slack, WhatsApp, etc.)
 │   ├── factory.rs  # Channel factory/registry
 │   ├── manager.rs  # Channel lifecycle management
 │   ├── telegram.rs # Telegram bot channel
 │   ├── slack.rs    # Slack outbound channel
 │   ├── discord.rs  # Discord Gateway WebSocket + REST
-│   └── webhook.rs  # Generic HTTP webhook inbound
+│   ├── webhook.rs  # Generic HTTP webhook inbound
+│   └── whatsapp.rs # WhatsApp via whatsmeow-rs bridge (WebSocket)
 ├── cli/            # Clap command parsing + command handlers
 ├── config/         # Configuration types and loading
 ├── cron/           # Persistent cron scheduler service
+├── deps/           # Dependency manager (install, start, stop, health check)
+│   ├── types.rs    # Dependency, DepKind, HealthCheck, HasDependencies
+│   ├── registry.rs # JSON registry (installed state tracking)
+│   ├── fetcher.rs  # DepFetcher trait + real/mock implementations
+│   └── manager.rs  # DepManager lifecycle orchestrator
 ├── gateway/        # Containerized agent proxy (Docker/Apple)
 ├── heartbeat/      # Periodic background task service
 ├── memory/         # Workspace memory (markdown search) + long-term memory
@@ -148,7 +159,15 @@ Message input channels via `Channel` trait:
 - `SlackChannel` - Slack outbound messaging
 - `DiscordChannel` - Discord Gateway WebSocket + REST API messaging
 - `WebhookChannel` - Generic HTTP POST inbound with optional Bearer auth
+- `WhatsAppChannel` - WhatsApp via whatsmeow-rs bridge (WebSocket JSON protocol)
 - CLI mode via direct agent invocation
+
+### Deps (`src/deps/`)
+- `HasDependencies` trait — components declare external dependencies
+- `DepKind` enum: Binary (GitHub Releases), DockerImage, NpmPackage, PipPackage
+- `DepManager` — install, start, stop, health check lifecycle orchestrator
+- `Registry` — JSON file at `~/.zeptoclaw/deps/registry.json` tracks installed state
+- `DepFetcher` trait — abstracts network calls for testability
 
 ### Tools (`src/tools/`)
 15 built-in tools + dynamic MCP tools via `Tool` async trait. All filesystem tools require workspace.

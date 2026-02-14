@@ -40,6 +40,9 @@ After completing any feature, update:
 - [x] MCP client
 - [x] Routines (event/webhook/cron triggers)
 - [x] Landing page + animations
+- [x] WhatsApp channel (via whatsmeow-rs bridge)
+- [x] CLI channel management (channel list/setup/test)
+- [x] Dependency manager (HasDependencies trait, DepManager, Registry)
 
 ---
 
@@ -56,5 +59,5 @@ After completing any feature, update:
 
 - Tests: ~1,314 total
 - Tools: 15 built-in + MCP + plugins
-- Channels: 4 (Telegram, Slack, Discord, Webhook)
+- Channels: 5 (Telegram, Slack, Discord, Webhook, WhatsApp)
 - Providers: 2 (Claude, OpenAI) + Retry + Fallback

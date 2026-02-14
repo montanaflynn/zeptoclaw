@@ -330,10 +330,19 @@ pub struct WhatsAppConfig {
     /// Allowlist of phone numbers (empty = allow all)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// Whether ZeptoClaw manages the bridge binary lifecycle.
+    /// When true, `channel setup` and `gateway` will auto-install and start the bridge.
+    /// When false, the user manages the bridge process externally.
+    #[serde(default = "default_bridge_managed")]
+    pub bridge_managed: bool,
 }
 
 fn default_whatsapp_bridge_url() -> String {
     "ws://localhost:3001".to_string()
+}
+
+fn default_bridge_managed() -> bool {
+    true
 }
 
 impl Default for WhatsAppConfig {
@@ -342,6 +351,7 @@ impl Default for WhatsAppConfig {
             enabled: false,
             bridge_url: default_whatsapp_bridge_url(),
             allow_from: Vec::new(),
+            bridge_managed: default_bridge_managed(),
         }
     }
 }

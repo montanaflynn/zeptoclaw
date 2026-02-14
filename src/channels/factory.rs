@@ -8,6 +8,7 @@ use crate::bus::MessageBus;
 use crate::config::Config;
 
 use super::webhook::{WebhookChannel, WebhookChannelConfig};
+use super::WhatsAppChannel;
 use super::{BaseChannelConfig, ChannelManager, DiscordChannel, SlackChannel, TelegramChannel};
 
 /// Register all configured channels that currently have implementations.
@@ -95,14 +96,21 @@ pub async fn register_configured_channels(
         }
     }
 
-    if config
-        .channels
-        .whatsapp
-        .as_ref()
-        .map(|c| c.enabled)
-        .unwrap_or(false)
-    {
-        warn!("WhatsApp channel is enabled but not implemented");
+    // WhatsApp (via bridge)
+    if let Some(ref whatsapp_config) = config.channels.whatsapp {
+        if whatsapp_config.enabled {
+            if whatsapp_config.bridge_url.is_empty() {
+                warn!("WhatsApp channel enabled but bridge_url is empty");
+            } else {
+                manager
+                    .register(Box::new(WhatsAppChannel::new(
+                        whatsapp_config.clone(),
+                        bus.clone(),
+                    )))
+                    .await;
+                info!("Registered WhatsApp channel");
+            }
+        }
     }
     if config
         .channels
@@ -148,7 +156,7 @@ pub async fn register_configured_channels(
 mod tests {
     use super::*;
     use crate::bus::MessageBus;
-    use crate::config::{Config, SlackConfig, TelegramConfig};
+    use crate::config::{Config, SlackConfig, TelegramConfig, WhatsAppConfig};
 
     #[tokio::test]
     async fn test_register_configured_channels_registers_telegram() {
@@ -165,6 +173,24 @@ mod tests {
 
         assert_eq!(count, 1);
         assert!(manager.has_channel("telegram").await);
+    }
+
+    #[tokio::test]
+    async fn test_register_configured_channels_registers_whatsapp() {
+        let bus = Arc::new(MessageBus::new());
+        let mut config = Config::default();
+        config.channels.whatsapp = Some(WhatsAppConfig {
+            enabled: true,
+            bridge_url: "ws://localhost:3001".to_string(),
+            allow_from: Vec::new(),
+            bridge_managed: true,
+        });
+
+        let manager = ChannelManager::new(bus.clone(), config.clone());
+        let count = register_configured_channels(&manager, bus, &config).await;
+
+        assert_eq!(count, 1);
+        assert!(manager.has_channel("whatsapp").await);
     }
 
     #[tokio::test]
