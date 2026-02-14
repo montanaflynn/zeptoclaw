@@ -10,7 +10,8 @@ Project-level guidance for coding agents working in this repository.
 - Benchmarks: `benches/message_bus.rs`
 - Integration tests: `tests/integration.rs`
 - Codebase: ~43,000+ lines of Rust
-- Tests: 1148 lib + 68 integration + ~98 doc = ~1,314 total
+- Channels: 5 (Telegram, Slack, Discord, Webhook, WhatsApp)
+- Tests: 1181 lib + 68 integration + ~98 doc = ~1,347 total
 
 ## Post-Implementation Checklist
 

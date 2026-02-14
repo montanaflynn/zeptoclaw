@@ -56,6 +56,11 @@ cargo fmt
 ./target/release/zeptoclaw batch --input prompts.jsonl --output results.jsonl --format jsonl
 ./target/release/zeptoclaw batch --input prompts.txt --template coder --stop-on-error
 
+# Channel management
+./target/release/zeptoclaw channel list
+./target/release/zeptoclaw channel setup whatsapp
+./target/release/zeptoclaw channel test whatsapp
+
 # Onboard (interactive setup)
 ./target/release/zeptoclaw onboard
 ```
@@ -66,13 +71,14 @@ cargo fmt
 src/
 ├── agent/          # Agent loop, context builder, token budget, context compaction
 ├── bus/            # Async message bus (pub/sub)
-├── channels/       # Input channels (Telegram, Slack, CLI)
+├── channels/       # Input channels (Telegram, Slack, WhatsApp, etc.)
 │   ├── factory.rs  # Channel factory/registry
 │   ├── manager.rs  # Channel lifecycle management
 │   ├── telegram.rs # Telegram bot channel
 │   ├── slack.rs    # Slack outbound channel
 │   ├── discord.rs  # Discord Gateway WebSocket + REST
-│   └── webhook.rs  # Generic HTTP webhook inbound
+│   ├── webhook.rs  # Generic HTTP webhook inbound
+│   └── whatsapp.rs # WhatsApp via whatsmeow-rs bridge (WebSocket)
 ├── cli/            # Clap command parsing + command handlers
 ├── config/         # Configuration types and loading
 ├── cron/           # Persistent cron scheduler service
@@ -148,6 +154,7 @@ Message input channels via `Channel` trait:
 - `SlackChannel` - Slack outbound messaging
 - `DiscordChannel` - Discord Gateway WebSocket + REST API messaging
 - `WebhookChannel` - Generic HTTP POST inbound with optional Bearer auth
+- `WhatsAppChannel` - WhatsApp via whatsmeow-rs bridge (WebSocket JSON protocol)
 - CLI mode via direct agent invocation
 
 ### Tools (`src/tools/`)

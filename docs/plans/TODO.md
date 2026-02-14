@@ -40,6 +40,8 @@ After completing any feature, update:
 - [x] MCP client
 - [x] Routines (event/webhook/cron triggers)
 - [x] Landing page + animations
+- [x] WhatsApp channel (via whatsmeow-rs bridge)
+- [x] CLI channel management (channel list/setup/test)
 
 ---
 

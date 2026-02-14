@@ -115,6 +115,7 @@ pub mod slack;
 pub mod telegram;
 mod types;
 pub mod webhook;
+pub mod whatsapp;
 
 pub use discord::DiscordChannel;
 pub use factory::register_configured_channels;
@@ -123,3 +124,4 @@ pub use slack::SlackChannel;
 pub use telegram::TelegramChannel;
 pub use types::{BaseChannelConfig, Channel};
 pub use webhook::{WebhookChannel, WebhookChannelConfig};
+pub use whatsapp::WhatsAppChannel;
