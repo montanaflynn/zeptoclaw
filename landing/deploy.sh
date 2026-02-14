@@ -1,59 +1,59 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Deploying landing pages to Cloudflare Pages..."
-echo ""
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# Check if user is logged in to wrangler
-if ! wrangler whoami &>/dev/null; then
-    echo "❌ Not logged in to Cloudflare. Please run:"
-    echo "   wrangler login"
+# Load .env if it exists
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
+# Check required env vars
+if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+    echo "Missing CLOUDFLARE_API_TOKEN"
+    echo "Set it in landing/.env or export it"
     exit 1
 fi
 
-echo "✓ Logged in to Cloudflare"
-echo ""
-
-# Deploy r8r
-echo "📦 Deploying r8r..."
-cd r8r
-if ! wrangler pages project list 2>/dev/null | grep -q "r8r"; then
-    echo "  Creating new project 'r8r'..."
-    wrangler pages project create r8r --production-branch=main || true
+if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+    echo "Missing CLOUDFLARE_ACCOUNT_ID"
+    echo "Set it in landing/.env or export it"
+    exit 1
 fi
-wrangler pages deploy . --project-name=r8r --branch=main
-cd ..
-echo ""
 
-# Build zeptoclaw docs and assemble deploy directory
-echo "📦 Building zeptoclaw docs..."
-cd zeptoclaw/docs
-npm install --silent
-npx astro build
-cd ../..
+DEPLOY_TARGET="${1:-all}"
 
-echo "📦 Assembling zeptoclaw deploy..."
-rm -rf zeptoclaw/_deploy
-mkdir -p zeptoclaw/_deploy/docs
-cp zeptoclaw/index.html zeptoclaw/_deploy/
-cp -r zeptoclaw/docs/dist/* zeptoclaw/_deploy/docs/
+deploy_r8r() {
+    echo "Deploying r8r..."
+    wrangler pages deploy "$SCRIPT_DIR/r8r" \
+        --project-name=r8r --branch=main --commit-dirty=true
+    echo "Done: https://r8r.pages.dev"
+}
 
-# Deploy zeptoclaw
-echo "📦 Deploying zeptoclaw..."
-cd zeptoclaw/_deploy
-if ! wrangler pages project list 2>/dev/null | grep -q "zeptoclaw"; then
-    echo "  Creating new project 'zeptoclaw'..."
-    wrangler pages project create zeptoclaw --production-branch=main || true
-fi
-wrangler pages deploy . --project-name=zeptoclaw --branch=main
-cd ../..
-rm -rf zeptoclaw/_deploy
-echo ""
+deploy_zeptoclaw() {
+    echo "Building zeptoclaw docs..."
+    cd "$SCRIPT_DIR/zeptoclaw/docs"
+    npm install --silent
+    npx astro build
+    cd "$SCRIPT_DIR"
 
-echo "✅ Deployment complete!"
-echo ""
-echo "🌐 Your sites should be available at:"
-echo "   https://r8r.pages.dev"
-echo "   https://zeptoclaw.pages.dev"
-echo ""
-echo "💡 Tip: Add custom domains in the Cloudflare dashboard"
+    echo "Assembling deploy..."
+    rm -rf "$SCRIPT_DIR/zeptoclaw/_deploy"
+    mkdir -p "$SCRIPT_DIR/zeptoclaw/_deploy/docs"
+    cp "$SCRIPT_DIR/zeptoclaw/index.html" "$SCRIPT_DIR/zeptoclaw/_deploy/"
+    cp -r "$SCRIPT_DIR/zeptoclaw/docs/dist/"* "$SCRIPT_DIR/zeptoclaw/_deploy/docs/"
+
+    echo "Deploying zeptoclaw..."
+    wrangler pages deploy "$SCRIPT_DIR/zeptoclaw/_deploy" \
+        --project-name=zeptoclaw --branch=main --commit-dirty=true
+    rm -rf "$SCRIPT_DIR/zeptoclaw/_deploy"
+    echo "Done: https://zeptoclaw.pages.dev"
+}
+
+case "$DEPLOY_TARGET" in
+    zeptoclaw) deploy_zeptoclaw ;;
+    r8r)       deploy_r8r ;;
+    all)       deploy_r8r; echo ""; deploy_zeptoclaw ;;
+    *)         echo "Usage: deploy.sh [zeptoclaw|r8r|all]"; exit 1 ;;
+esac

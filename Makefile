@@ -1,4 +1,4 @@
-.PHONY: build build-release install clean test lint fmt check all
+.PHONY: build build-release install clean test lint fmt check all deploy deploy-zeptoclaw deploy-r8r
 
 BINARY_NAME := zeptoclaw
 BUILD_DIR := target
@@ -71,6 +71,18 @@ run-interactive:
 run-gateway:
 	cargo run -- gateway
 
+# Deploy zeptoclaw landing + docs to Cloudflare Pages
+deploy-zeptoclaw:
+	bash landing/deploy.sh zeptoclaw
+
+# Deploy r8r landing to Cloudflare Pages
+deploy-r8r:
+	bash landing/deploy.sh r8r
+
+# Deploy all landing pages
+deploy:
+	bash landing/deploy.sh all
+
 # Show help
 help:
 	@echo "ZeptoClaw Rust - Build Commands"
@@ -90,6 +102,11 @@ help:
 	@echo "Installation:"
 	@echo "  make install        - Install to ~/.local/bin"
 	@echo "  make uninstall      - Remove from ~/.local/bin"
+	@echo ""
+	@echo "Deploy:"
+	@echo "  make deploy-zeptoclaw - Deploy zeptoclaw landing + docs"
+	@echo "  make deploy-r8r       - Deploy r8r landing"
+	@echo "  make deploy           - Deploy all landing pages"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean          - Remove build artifacts"

@@ -39,3 +39,7 @@ landing/**/node_modules/
 landing/**/.wrangler/
 landing/**/dist/
 landing/**/_deploy/
+
+# Secrets
+.env
+landing/.env
