@@ -48,7 +48,7 @@ deploy_zeptoclaw() {
     wrangler pages deploy "$SCRIPT_DIR/zeptoclaw/_deploy" \
         --project-name=zeptoclaw --branch=main --commit-dirty=true
     rm -rf "$SCRIPT_DIR/zeptoclaw/_deploy"
-    echo "Done: https://zeptoclaw.pages.dev"
+    echo "Done: https://zeptoclaw.com"
 }
 
 case "$DEPLOY_TARGET" in

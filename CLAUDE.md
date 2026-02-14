@@ -105,6 +105,10 @@ src/
 ├── error.rs        # Error types (ZeptoError)
 ├── lib.rs          # Library exports
 └── main.rs         # Thin entry point delegating to cli::run()
+
+landing/
+└── zeptoclaw/
+    └── index.html  # Static landing page (hero, sections, interactive animations)
 ```
 
 ## Key Modules
@@ -165,6 +169,12 @@ Message input channels via `Channel` trait:
 ### Memory (`src/memory/`)
 - Workspace memory - Markdown search/read with chunked scoring
 - `LongTermMemory` - Persistent key-value store at `~/.zeptoclaw/memory/longterm.json` with categories, tags, access tracking
+
+### Landing (`landing/zeptoclaw/index.html`)
+- Hero ambient animation, mascot eye/pupil motion, and magnetic CTA interactions
+- Scroll-triggered feature-card reveal and stats count-up animations
+- Architecture pipeline flow packets and enhanced terminal typing/thinking feedback
+- `prefers-reduced-motion` support for accessibility fallback
 
 ### Security (`src/security/`)
 - `shell.rs` - Regex-based command blocklist

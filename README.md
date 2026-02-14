@@ -6,7 +6,7 @@
   <strong>AI assistant framework that fits in 5 megabytes.</strong>
 </p>
 <p align="center">
-  <a href="https://zeptoclaw.pages.dev/docs/"><img src="https://img.shields.io/badge/docs-zeptoclaw.pages.dev-3b82f6?style=for-the-badge&logo=bookstack&logoColor=white" alt="Documentation"></a>
+  <a href="https://zeptoclaw.com/docs/"><img src="https://img.shields.io/badge/docs-zeptoclaw.com-3b82f6?style=for-the-badge&logo=bookstack&logoColor=white" alt="Documentation"></a>
 </p>
 <p align="center">
   <a href="https://github.com/qhkm/zeptoclaw/actions/workflows/ci.yml"><img src="https://github.com/qhkm/zeptoclaw/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -128,7 +128,7 @@ zeptoclaw gateway --containerized
 | **Telemetry** | Prometheus + JSON metrics export, structured logging, per-tenant tracing |
 | **Multi-Tenant** | Hundreds of tenants on one VPS — isolated workspaces, ~6MB RAM each |
 
-> **Full documentation** — [zeptoclaw.pages.dev/docs](https://zeptoclaw.pages.dev/docs/) covers configuration, environment variables, CLI reference, deployment guides, and more.
+> **Full documentation** — [zeptoclaw.com/docs](https://zeptoclaw.com/docs/) covers configuration, environment variables, CLI reference, deployment guides, and more.
 
 ## Inspired By
 

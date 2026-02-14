@@ -78,6 +78,9 @@ After completing any feature, update these 3 files:
 - [x] Improved CLI UX guardrails — root now supports `--version` and help-on-empty invocation; `heartbeat --show`/`--edit` conflict is enforced; `skills show` missing skill exits non-zero
 - [x] Hardened onboarding safety — existing invalid config now fails with context instead of silently resetting to defaults
 
+### Landing UX (2026-02-14)
+- [x] ZeptoClaw landing animation pass (`landing/zeptoclaw/index.html`) — animated hero energy field, mascot eye blink + pupil drift, magnetic CTA hover, staggered feature-card reveal, architecture connector flow packets, stat count-up on scroll, and richer terminal typing feedback
+
 ---
 
 ## Backlog

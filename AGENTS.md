@@ -29,6 +29,7 @@ If you skip this, the next agent starts with stale context and wastes time.
 ## Current State (2026-02-14)
 
 ### Recently Completed
+- ZeptoClaw landing page animation refresh (`landing/zeptoclaw/index.html`) — hero energy field, mascot blink/look motion, magnetic CTA buttons, staggered feature reveals, architecture flow packets, stat count-up, and richer terminal animation with reduced-motion fallback
 - CLI regression recovery — restored `batch`, `history`, `template` commands and `agent --template` wiring in `src/cli/`
 - Config check hardening — recognizes `agents.defaults.streaming` + `token_budget`, now exits non-zero on validation errors
 - CLI UX polish — `--version` support, help on empty invocation, conflict handling for `heartbeat --show/--edit`, and non-zero exit for missing `skills show`

@@ -6,13 +6,14 @@
   --sl-color-accent-low: #1F9E97;
 }
 
-/* Dark mode tweaks */
+/* Dark mode tweaks — use neutral dark backgrounds (same as r8r)
+   to avoid confusing Starlight's text color algorithm */
 [data-theme='dark'] {
-  --sl-color-bg: #0B1A1E;
-  --sl-color-bg-nav: #0F2329;
-  --sl-color-bg-sidebar: #0F2329;
-  --sl-color-bg-inline-code: #142E35;
-  --sl-color-border: #1A3A42;
+  --sl-color-bg: #0a0a0b;
+  --sl-color-bg-nav: #111113;
+  --sl-color-bg-sidebar: #111113;
+  --sl-color-bg-inline-code: #1a1a1d;
+  --sl-color-border: #27272a;
 }
 
 /* Custom font */

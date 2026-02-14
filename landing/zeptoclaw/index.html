@@ -77,6 +77,30 @@
             height: 100%;
         }
 
+        .logo-icon .claw-eye {
+            transform-origin: center;
+            transform-box: fill-box;
+            animation: mascotBlink 7s infinite;
+        }
+
+        .logo-icon .claw-pupil {
+            transform-origin: center;
+            transform-box: fill-box;
+            animation: mascotLook 5s ease-in-out infinite;
+        }
+
+        @keyframes mascotBlink {
+            0%, 45%, 48%, 100% { transform: scaleY(1); }
+            46%, 47% { transform: scaleY(0.12); }
+        }
+
+        @keyframes mascotLook {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(0.5px); }
+            50% { transform: translateX(-0.8px); }
+            75% { transform: translateX(0.3px); }
+        }
+
         .nav-links {
             display: flex;
             gap: 2rem;
@@ -103,11 +127,13 @@
             font-size: 0.875rem;
             font-weight: 600;
             text-decoration: none;
-            transition: background 0.2s;
+            transition: transform 0.22s ease, background 0.2s, box-shadow 0.2s;
+            will-change: transform;
         }
 
         .nav-cta:hover {
             background: var(--accent-hover);
+            box-shadow: 0 8px 22px -12px rgba(46, 196, 182, 0.75);
         }
 
         /* Hero Section */
@@ -124,20 +150,46 @@
         .hero::before {
             content: '';
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 40%;
+            left: 25%;
             transform: translate(-50%, -50%);
-            width: 800px;
-            height: 800px;
-            background: radial-gradient(circle, rgba(46, 196, 182, 0.15) 0%, transparent 70%);
+            width: 700px;
+            height: 700px;
+            background: radial-gradient(circle, rgba(46, 196, 182, 0.12) 0%, transparent 70%);
             pointer-events: none;
+            animation: heroField 14s ease-in-out infinite;
+        }
+
+        @keyframes heroField {
+            0%, 100% {
+                transform: translate(-50%, -50%) scale(0.95);
+                opacity: 0.7;
+            }
+            50% {
+                transform: translate(-50%, -50%) scale(1.08);
+                opacity: 1;
+            }
         }
 
         .hero-content {
-            max-width: 1000px;
-            text-align: center;
+            max-width: 1200px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1.15fr;
+            gap: 3rem;
+            align-items: center;
             position: relative;
             z-index: 1;
+        }
+
+        .hero-left {
+            text-align: left;
+        }
+
+        .hero-mascot {
+            width: 56px;
+            height: 56px;
+            margin-bottom: 1.25rem;
         }
 
         .badge {
@@ -151,7 +203,7 @@
             font-size: 0.75rem;
             font-weight: 500;
             color: var(--text-secondary);
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.25rem;
         }
 
         .badge::before {
@@ -169,10 +221,10 @@
         }
 
         h1 {
-            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-size: clamp(2.25rem, 4vw, 3.25rem);
             font-weight: 700;
-            line-height: 1.1;
-            margin-bottom: 1.5rem;
+            line-height: 1.12;
+            margin-bottom: 1.25rem;
             letter-spacing: -0.02em;
         }
 
@@ -181,25 +233,24 @@
         }
 
         .hero-subtitle {
-            font-size: 1.25rem;
+            font-size: 1.1rem;
             color: var(--text-secondary);
-            max-width: 600px;
-            margin: 0 auto 2rem;
+            margin-bottom: 1.75rem;
+            line-height: 1.6;
         }
 
         .hero-stats {
             display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin-bottom: 2rem;
+            gap: 1.25rem;
+            margin-bottom: 1.75rem;
             flex-wrap: wrap;
         }
 
         .hero-stat {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            font-size: 0.875rem;
+            gap: 0.375rem;
+            font-size: 0.8125rem;
             color: var(--text-secondary);
         }
 
@@ -211,8 +262,35 @@
         .hero-cta {
             display: flex;
             gap: 1rem;
-            justify-content: center;
             flex-wrap: wrap;
+        }
+
+        .hero-right {
+            position: relative;
+        }
+
+        @media (max-width: 900px) {
+            .hero-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+
+            .hero-left {
+                text-align: center;
+            }
+
+            .hero-mascot {
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .hero-stats {
+                justify-content: center;
+            }
+
+            .hero-cta {
+                justify-content: center;
+            }
         }
 
         .btn {
@@ -221,10 +299,11 @@
             font-size: 0.875rem;
             font-weight: 600;
             text-decoration: none;
-            transition: all 0.2s;
+            transition: transform 0.22s ease, background 0.2s, border-color 0.2s, box-shadow 0.2s;
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
+            will-change: transform;
         }
 
         .btn-primary {
@@ -235,6 +314,7 @@
         .btn-primary:hover {
             background: var(--accent-hover);
             transform: translateY(-1px);
+            box-shadow: 0 8px 30px -12px rgba(46, 196, 182, 0.8);
         }
 
         .btn-secondary {
@@ -250,8 +330,7 @@
 
         /* Terminal Window */
         .terminal {
-            max-width: 850px;
-            margin: 3rem auto 0;
+            width: 100%;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
@@ -290,6 +369,7 @@
             font-size: 0.8125rem;
             line-height: 1.7;
             text-align: left;
+            min-height: 320px;
         }
 
         .terminal-line {
@@ -312,6 +392,42 @@
             color: var(--text-secondary);
             margin: 0.5rem 0 1rem 1.5rem;
             transition: opacity 0.3s ease;
+        }
+
+        .terminal-output.terminal-tool-line {
+            animation: toolPulse 0.55s ease-out;
+        }
+
+        @keyframes toolPulse {
+            0% { opacity: 0.35; filter: brightness(1.2); transform: translateX(-2px); }
+            100% { opacity: 1; filter: brightness(1); transform: translateX(0); }
+        }
+
+        .terminal-thinking {
+            margin: 0.25rem 0 0.75rem 1.5rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .terminal-thinking-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: thinkingDot 1s ease-in-out infinite;
+        }
+
+        .terminal-thinking-dot:nth-child(2) { animation-delay: 0.15s; }
+        .terminal-thinking-dot:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes thinkingDot {
+            0%, 100% { opacity: 0.3; transform: translateY(0); }
+            50% { opacity: 1; transform: translateY(-2px); }
         }
 
         .terminal-comment {
@@ -393,6 +509,17 @@
             border-radius: var(--radius-lg);
             padding: 1.5rem;
             transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .feature-card.reveal-ready {
+            opacity: 0;
+            transform: translateY(16px);
+        }
+
+        .feature-card.reveal-visible {
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 0.45s ease, transform 0.45s ease, border-color 0.2s;
         }
 
         .feature-card:hover {
@@ -490,11 +617,47 @@
             align-items: center;
             padding: 0 0.75rem;
             flex-shrink: 0;
+            position: relative;
+            overflow: hidden;
         }
 
         .arch-connector svg {
             width: 40px;
             height: 20px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .flow-packet {
+            position: absolute;
+            top: 50%;
+            left: -14px;
+            width: 8px;
+            height: 8px;
+            margin-top: -4px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 0 4px rgba(46, 196, 182, 0.18);
+            animation: packetFlow 2.2s linear infinite;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .flow-packet.delay {
+            animation-delay: 1.1s;
+        }
+
+        @keyframes packetFlow {
+            0% {
+                transform: translateX(0) scale(0.9);
+                opacity: 0;
+            }
+            15% { opacity: 1; }
+            85% { opacity: 1; }
+            100% {
+                transform: translateX(60px) scale(1);
+                opacity: 0;
+            }
         }
 
         @media (max-width: 768px) {
@@ -809,6 +972,24 @@
             user-select: none;
         }
 
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+                scroll-behavior: auto !important;
+            }
+
+            .feature-card.reveal-ready,
+            .feature-card.reveal-visible {
+                opacity: 1;
+                transform: none;
+            }
+
+            .flow-packet {
+                display: none;
+            }
+        }
+
         /* Mobile Menu */
         .mobile-menu-btn {
             display: none;
@@ -852,7 +1033,7 @@
     <nav>
         <div class="nav-container">
             <a href="#" class="logo">
-                <div class="logo-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><line x1="24" y1="18" x2="18" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><line x1="40" y1="18" x2="46" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><circle cx="18" cy="5" r="2.5" fill="#67e8f9"/><circle cx="46" cy="5" r="2.5" fill="#67e8f9"/><ellipse cx="32" cy="38" rx="24" ry="20" fill="#374151"/><ellipse cx="32" cy="32" rx="20" ry="14" fill="#4a5568"/><ellipse cx="32" cy="36" rx="22" ry="16" fill="#3d4b5e"/><ellipse cx="22" cy="36" rx="8" ry="8.5" fill="#1e293b"/><ellipse cx="42" cy="36" rx="8" ry="8.5" fill="#1e293b"/><circle cx="22" cy="36" r="6" fill="#3b82f6"/><circle cx="42" cy="36" r="6" fill="#3b82f6"/><circle cx="22" cy="36" r="3.5" fill="#1d4ed8"/><circle cx="42" cy="36" r="3.5" fill="#1d4ed8"/><circle cx="20" cy="34" r="1.8" fill="#fff" opacity="0.9"/><circle cx="40" cy="34" r="1.8" fill="#fff" opacity="0.9"/><ellipse cx="32" cy="48" rx="4" ry="2" fill="#f472b6"/></svg></div>
+                <div class="logo-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><line x1="24" y1="18" x2="18" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><line x1="40" y1="18" x2="46" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><circle cx="18" cy="5" r="2.5" fill="#67e8f9"/><circle cx="46" cy="5" r="2.5" fill="#67e8f9"/><ellipse cx="32" cy="38" rx="24" ry="20" fill="#374151"/><ellipse cx="32" cy="32" rx="20" ry="14" fill="#4a5568"/><ellipse cx="32" cy="36" rx="22" ry="16" fill="#3d4b5e"/><ellipse cx="22" cy="36" rx="8" ry="8.5" fill="#1e293b"/><ellipse cx="42" cy="36" rx="8" ry="8.5" fill="#1e293b"/><circle class="claw-eye" cx="22" cy="36" r="6" fill="#3b82f6"/><circle class="claw-eye" cx="42" cy="36" r="6" fill="#3b82f6"/><circle class="claw-pupil" cx="22" cy="36" r="3.5" fill="#1d4ed8"/><circle class="claw-pupil" cx="42" cy="36" r="3.5" fill="#1d4ed8"/><circle cx="20" cy="34" r="1.8" fill="#fff" opacity="0.9"/><circle cx="40" cy="34" r="1.8" fill="#fff" opacity="0.9"/><ellipse cx="32" cy="48" rx="4" ry="2" fill="#f472b6"/></svg></div>
                 ZeptoClaw
             </a>
             <ul class="nav-links">
@@ -868,34 +1049,39 @@
 
     <section class="hero">
         <div class="hero-content">
-            <div class="badge">v0.2.0 — Now Available</div>
-            <h1>AI Assistant That Fits<br>in <span class="highlight">5 Megabytes</span></h1>
-            <p class="hero-subtitle">
-                Ultra-lightweight AI agent framework. Streaming, agent swarms, plugins,
-                batch mode, 5 channels, container isolation — all in a single Rust binary.
-            </p>
-            <div class="hero-stats">
-                <div class="hero-stat">⚡ <span>~5MB</span> binary</div>
-                <div class="hero-stat">🛠️ <span>17</span> tools + plugins</div>
-                <div class="hero-stat">📡 <span>5</span> channels</div>
-                <div class="hero-stat">🧪 <span>1000+</span> tests</div>
-            </div>
-            <div class="hero-cta">
-                <a href="#install" class="btn btn-primary">Install ZeptoClaw</a>
-                <a href="docs/" class="btn btn-secondary">Read Docs</a>
+            <div class="hero-left">
+                <svg class="hero-mascot" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><line x1="24" y1="18" x2="18" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><line x1="40" y1="18" x2="46" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><circle cx="18" cy="5" r="2.5" fill="#67e8f9"/><circle cx="46" cy="5" r="2.5" fill="#67e8f9"/><ellipse cx="32" cy="38" rx="24" ry="20" fill="#374151"/><ellipse cx="32" cy="32" rx="20" ry="14" fill="#4a5568"/><ellipse cx="32" cy="36" rx="22" ry="16" fill="#3d4b5e"/><ellipse cx="22" cy="36" rx="8" ry="8.5" fill="#1e293b"/><ellipse cx="42" cy="36" rx="8" ry="8.5" fill="#1e293b"/><circle cx="22" cy="36" r="6" fill="#3b82f6"/><circle cx="42" cy="36" r="6" fill="#3b82f6"/><circle cx="22" cy="36" r="3.5" fill="#1d4ed8"/><circle cx="42" cy="36" r="3.5" fill="#1d4ed8"/><circle cx="20" cy="34" r="1.8" fill="#fff" opacity="0.9"/><circle cx="40" cy="34" r="1.8" fill="#fff" opacity="0.9"/><ellipse cx="32" cy="48" rx="4" ry="2" fill="#f472b6"/></svg>
+                <div class="badge">v0.2.0 — Now Available</div>
+                <h1>AI Agent Framework<br>in <span class="highlight">5 Megabytes</span></h1>
+                <p class="hero-subtitle">
+                    Deploy an AI assistant in 60 seconds. One Rust binary with streaming,
+                    agent swarms, plugins, and container isolation.
+                </p>
+                <div class="hero-stats">
+                    <div class="hero-stat">⚡ <span>~5MB</span> binary</div>
+                    <div class="hero-stat">🛠️ <span>17</span> tools</div>
+                    <div class="hero-stat">📡 <span>5</span> channels</div>
+                    <div class="hero-stat">🧪 <span>1,100+</span> tests</div>
+                </div>
+                <div class="hero-cta">
+                    <a href="#install" class="btn btn-primary">Install ZeptoClaw</a>
+                    <a href="docs/" class="btn btn-secondary">Read Docs</a>
+                </div>
             </div>
 
-            <div class="terminal">
-                <div class="terminal-header">
-                    <div class="terminal-dot red"></div>
-                    <div class="terminal-dot yellow"></div>
-                    <div class="terminal-dot green"></div>
-                    <span class="terminal-title">zeptoclaw — agent mode</span>
-                </div>
-                <div class="terminal-body" id="terminal-body">
-                    <div class="terminal-line">
-                        <span class="terminal-prompt">$</span>
-                        <span class="terminal-command" id="typed-cmd"></span><span class="cursor" id="typing-cursor"></span>
+            <div class="hero-right">
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                        <span class="terminal-title">zeptoclaw — agent mode</span>
+                    </div>
+                    <div class="terminal-body" id="terminal-body">
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">$</span>
+                            <span class="terminal-command" id="typed-cmd"></span><span class="cursor" id="typing-cursor"></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1095,6 +1281,8 @@
                 </div>
                 <div class="arch-connector">
                     <svg viewBox="0 0 40 20" fill="none"><path d="M0 10h30m0 0l-6-5m6 5l-6 5" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="flow-packet"></span>
+                    <span class="flow-packet delay"></span>
                 </div>
                 <div class="arch-card">
                     <h4>Agent Loop</h4>
@@ -1102,6 +1290,8 @@
                 </div>
                 <div class="arch-connector">
                     <svg viewBox="0 0 40 20" fill="none"><path d="M0 10h30m0 0l-6-5m6 5l-6 5" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="flow-packet"></span>
+                    <span class="flow-packet delay"></span>
                 </div>
                 <div class="arch-card">
                     <h4>Provider Stack</h4>
@@ -1143,19 +1333,19 @@
     <section class="stats">
         <div class="stats-grid">
             <div class="stat-item">
-                <div class="stat-value">~5MB</div>
+                <div class="stat-value" data-count="5" data-prefix="~" data-suffix="MB">~5MB</div>
                 <div class="stat-label">Release Binary</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value">20+</div>
+                <div class="stat-value" data-count="20" data-suffix="+">20+</div>
                 <div class="stat-label">Core Modules</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value">17</div>
+                <div class="stat-value" data-count="17">17</div>
                 <div class="stat-label">Tools + Plugins</div>
             </div>
             <div class="stat-item">
-                <div class="stat-value">1000+</div>
+                <div class="stat-value" data-count="1000" data-suffix="+">1000+</div>
                 <div class="stat-label">Tests Passing</div>
             </div>
         </div>
@@ -1212,7 +1402,7 @@
         <div class="footer-content">
             <div class="footer-left">
                 <div class="footer-logo">
-                    <div class="logo-icon" style="width: 24px; height: 24px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><line x1="24" y1="18" x2="18" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><line x1="40" y1="18" x2="46" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><circle cx="18" cy="5" r="2.5" fill="#67e8f9"/><circle cx="46" cy="5" r="2.5" fill="#67e8f9"/><ellipse cx="32" cy="38" rx="24" ry="20" fill="#374151"/><ellipse cx="32" cy="32" rx="20" ry="14" fill="#4a5568"/><ellipse cx="32" cy="36" rx="22" ry="16" fill="#3d4b5e"/><ellipse cx="22" cy="36" rx="8" ry="8.5" fill="#1e293b"/><ellipse cx="42" cy="36" rx="8" ry="8.5" fill="#1e293b"/><circle cx="22" cy="36" r="6" fill="#3b82f6"/><circle cx="42" cy="36" r="6" fill="#3b82f6"/><circle cx="22" cy="36" r="3.5" fill="#1d4ed8"/><circle cx="42" cy="36" r="3.5" fill="#1d4ed8"/><circle cx="20" cy="34" r="1.8" fill="#fff" opacity="0.9"/><circle cx="40" cy="34" r="1.8" fill="#fff" opacity="0.9"/><ellipse cx="32" cy="48" rx="4" ry="2" fill="#f472b6"/></svg></div>
+                    <div class="logo-icon" style="width: 24px; height: 24px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><line x1="24" y1="18" x2="18" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><line x1="40" y1="18" x2="46" y2="6" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round"/><circle cx="18" cy="5" r="2.5" fill="#67e8f9"/><circle cx="46" cy="5" r="2.5" fill="#67e8f9"/><ellipse cx="32" cy="38" rx="24" ry="20" fill="#374151"/><ellipse cx="32" cy="32" rx="20" ry="14" fill="#4a5568"/><ellipse cx="32" cy="36" rx="22" ry="16" fill="#3d4b5e"/><ellipse cx="22" cy="36" rx="8" ry="8.5" fill="#1e293b"/><ellipse cx="42" cy="36" rx="8" ry="8.5" fill="#1e293b"/><circle class="claw-eye" cx="22" cy="36" r="6" fill="#3b82f6"/><circle class="claw-eye" cx="42" cy="36" r="6" fill="#3b82f6"/><circle class="claw-pupil" cx="22" cy="36" r="3.5" fill="#1d4ed8"/><circle class="claw-pupil" cx="42" cy="36" r="3.5" fill="#1d4ed8"/><circle cx="20" cy="34" r="1.8" fill="#fff" opacity="0.9"/><circle cx="40" cy="34" r="1.8" fill="#fff" opacity="0.9"/><ellipse cx="32" cy="48" rx="4" ry="2" fill="#f472b6"/></svg></div>
                     ZeptoClaw
                 </div>
                 <div class="footer-tagline">Ultra-lightweight AI assistant framework</div>
@@ -1229,16 +1419,116 @@
     </footer>
 
     <script>
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
         // Smooth scroll for anchor links
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
                 e.preventDefault();
                 const target = document.querySelector(this.getAttribute('href'));
                 if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    target.scrollIntoView({
+                        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+                        block: 'start',
+                    });
                 }
             });
         });
+
+        // Magnetic CTA buttons
+        (function() {
+            if (prefersReducedMotion) {
+                return;
+            }
+
+            const magnets = document.querySelectorAll('.hero .btn, .nav-cta');
+            magnets.forEach(btn => {
+                btn.addEventListener('pointermove', event => {
+                    const rect = btn.getBoundingClientRect();
+                    const x = event.clientX - rect.left - rect.width / 2;
+                    const y = event.clientY - rect.top - rect.height / 2;
+                    const moveX = (x / rect.width) * 14;
+                    const moveY = (y / rect.height) * 10;
+                    btn.style.transform = `translate(${moveX.toFixed(1)}px, ${moveY.toFixed(1)}px)`;
+                });
+                btn.addEventListener('pointerleave', () => {
+                    btn.style.transform = '';
+                });
+            });
+        })();
+
+        // Staggered reveal for feature cards
+        (function() {
+            const cards = Array.from(document.querySelectorAll('.feature-card'));
+            if (!cards.length || prefersReducedMotion) {
+                return;
+            }
+
+            cards.forEach(card => card.classList.add('reveal-ready'));
+            const observer = new IntersectionObserver(entries => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting) {
+                        return;
+                    }
+                    const index = cards.indexOf(entry.target);
+                    entry.target.style.transitionDelay = `${Math.min(index * 60, 420)}ms`;
+                    entry.target.classList.add('reveal-visible');
+                    observer.unobserve(entry.target);
+                });
+            }, { threshold: 0.18 });
+
+            cards.forEach(card => observer.observe(card));
+        })();
+
+        // Count-up stats
+        (function() {
+            const values = Array.from(document.querySelectorAll('.stat-value[data-count]'));
+            if (!values.length) {
+                return;
+            }
+
+            function format(el, value) {
+                const prefix = el.dataset.prefix || '';
+                const suffix = el.dataset.suffix || '';
+                return `${prefix}${value.toLocaleString()}${suffix}`;
+            }
+
+            function animate(el) {
+                const target = Number(el.dataset.count || '0');
+                if (!Number.isFinite(target)) {
+                    return;
+                }
+
+                if (prefersReducedMotion) {
+                    el.textContent = format(el, target);
+                    return;
+                }
+
+                const duration = 1300;
+                const startTime = performance.now();
+                function tick(now) {
+                    const progress = Math.min((now - startTime) / duration, 1);
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    const current = Math.round(target * eased);
+                    el.textContent = format(el, current);
+                    if (progress < 1) {
+                        requestAnimationFrame(tick);
+                    }
+                }
+                requestAnimationFrame(tick);
+            }
+
+            const observer = new IntersectionObserver(entries => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        animate(entry.target);
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.5 });
+
+            values.forEach(value => observer.observe(value));
+        })();
 
         // Terminal typing animation
         (function() {
@@ -1288,10 +1578,21 @@
             function addOutputLine(html) {
                 const div = document.createElement('div');
                 div.className = 'terminal-output';
+                if (html.includes('terminal-tool')) {
+                    div.classList.add('terminal-tool-line');
+                }
                 div.style.opacity = '0';
                 div.innerHTML = html;
                 body.insertBefore(div, body.lastElementChild);
                 requestAnimationFrame(() => { div.style.opacity = '1'; });
+            }
+
+            function addThinkingLine() {
+                const thinking = document.createElement('div');
+                thinking.className = 'terminal-thinking';
+                thinking.innerHTML = '<span class="terminal-thinking-dot"></span><span class="terminal-thinking-dot"></span><span class="terminal-thinking-dot"></span> thinking';
+                body.insertBefore(thinking, body.lastElementChild);
+                return thinking;
             }
 
             function newPromptLine() {
@@ -1312,6 +1613,16 @@
             }
 
             async function runAnimation() {
+                if (prefersReducedMotion) {
+                    cmdEl.textContent = scenes[0].cmd;
+                    scenes[0].lines.forEach(line => addOutputLine(line.html));
+                    const cmd = newPromptLine();
+                    cmd.textContent = scenes[1].cmd;
+                    scenes[1].lines.forEach(line => addOutputLine(line.html));
+                    newPromptLine();
+                    return;
+                }
+
                 for (let s = 0; s < scenes.length; s++) {
                     const scene = scenes[s];
                     const cmdTarget = s === 0 ? cmdEl : newPromptLine();
@@ -1319,6 +1630,10 @@
                     // Type command
                     await typeText(cmdTarget, scene.cmd, 25);
                     await sleep(300);
+
+                    const thinkingLine = addThinkingLine();
+                    await sleep(420);
+                    thinkingLine.remove();
 
                     // Show output lines one by one
                     for (const line of scene.lines) {

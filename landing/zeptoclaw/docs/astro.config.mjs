@@ -61,6 +61,6 @@ export default defineConfig({
       ],
     }),
   ],
-  site: 'https://zeptoclaw.pages.dev',
+  site: 'https://zeptoclaw.com',
   base: '/docs',
 });
