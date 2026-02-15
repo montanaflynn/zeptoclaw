@@ -69,6 +69,14 @@ pub trait Tool: Send + Sync {
     /// # Returns
     /// A string result that will be sent back to the LLM.
     async fn execute(&self, args: Value, ctx: &ToolContext) -> Result<String>;
+
+    /// Get a compact (shorter) description for token-constrained environments.
+    ///
+    /// Defaults to the full description. Override in individual tools for
+    /// shorter versions (~40% token savings).
+    fn compact_description(&self) -> &str {
+        self.description()
+    }
 }
 
 /// Context provided to tools during execution.

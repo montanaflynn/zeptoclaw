@@ -56,6 +56,7 @@
 pub mod approval;
 pub mod binary_plugin;
 pub mod cron;
+pub mod custom;
 pub mod delegate;
 pub mod filesystem;
 pub mod gsheets;
@@ -74,6 +75,7 @@ pub mod web;
 pub mod whatsapp;
 
 pub use binary_plugin::BinaryPluginTool;
+pub use custom::CustomTool;
 pub use delegate::DelegateTool;
 pub use gsheets::GoogleSheetsTool;
 pub use longterm_memory::LongTermMemoryTool;
@@ -119,6 +121,10 @@ impl Tool for EchoTool {
 
     fn description(&self) -> &str {
         "Echoes back the provided message"
+    }
+
+    fn compact_description(&self) -> &str {
+        "Echo message"
     }
 
     fn parameters(&self) -> Value {
@@ -236,5 +242,13 @@ mod tests {
             .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Line1\nLine2\tTab");
+    }
+
+    #[test]
+    fn test_echo_compact_description() {
+        let tool = EchoTool;
+        assert_eq!(tool.compact_description(), "Echo message");
+        // Verify compact is shorter than full
+        assert!(tool.compact_description().len() < tool.description().len());
     }
 }

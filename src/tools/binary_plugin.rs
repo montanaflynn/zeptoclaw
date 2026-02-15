@@ -115,6 +115,10 @@ impl Tool for BinaryPluginTool {
         &self.def.description
     }
 
+    fn compact_description(&self) -> &str {
+        self.description()
+    }
+
     fn parameters(&self) -> Value {
         self.def.parameters.clone()
     }

@@ -160,6 +160,10 @@ impl Tool for R8rTool {
          to be invoked by AI agents for structured, predictable tasks."
     }
 
+    fn compact_description(&self) -> &str {
+        "R8r workflow"
+    }
+
     fn parameters(&self) -> Value {
         json!({
             "type": "object",

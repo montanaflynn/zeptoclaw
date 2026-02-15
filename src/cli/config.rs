@@ -38,10 +38,18 @@ pub(crate) async fn cmd_config(action: ConfigAction) -> Result<()> {
                 .iter()
                 .filter(|d| d.level == zeptoclaw::config::validate::DiagnosticLevel::Error)
                 .count();
-            let warnings = diagnostics
+            let mut warnings = diagnostics
                 .iter()
                 .filter(|d| d.level == zeptoclaw::config::validate::DiagnosticLevel::Warn)
                 .count();
+
+            // Validate custom tool definitions
+            let config = Config::load().unwrap_or_default();
+            let tool_warnings = zeptoclaw::config::validate::validate_custom_tools(&config);
+            for w in &tool_warnings {
+                println!("[WARN] {}", w);
+            }
+            warnings += tool_warnings.len();
 
             if errors == 0 && warnings == 0 {
                 println!("\nConfiguration looks good!");

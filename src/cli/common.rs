@@ -230,8 +230,35 @@ pub(crate) async fn create_agent_with_template(
                 .collect::<HashSet<_>>()
         })
         .unwrap_or_default();
+
+    // Resolve tool profile: config default > template override > all tools
+    let profile_tools: Option<HashSet<String>> =
+        if let Some(ref profile_name) = config.agents.defaults.tool_profile {
+            match config.tool_profiles.get(profile_name) {
+                Some(tools) => tools
+                    .as_ref()
+                    .map(|names| names.iter().map(|n| n.to_ascii_lowercase()).collect()),
+                None => {
+                    warn!(
+                        "Tool profile '{}' not found in tool_profiles config — all tools enabled",
+                        profile_name
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
     let tool_enabled = |name: &str| {
         let key = name.to_ascii_lowercase();
+        // Profile filter (if active)
+        if let Some(ref profile) = profile_tools {
+            if !profile.contains(&key) {
+                return false;
+            }
+        }
+        // Template allowed filter
         if let Some(allowed) = &allowed_tools {
             if !allowed.contains(&key) {
                 return false;
@@ -527,6 +554,25 @@ Enable runtime.allow_fallback_to_native to opt in to native fallback.",
             }
             Err(e) => warn!(error = %e, "Plugin discovery failed"),
         }
+    }
+
+    // Validate and register custom CLI-defined tools
+    let tool_warnings = zeptoclaw::config::validate::validate_custom_tools(&config);
+    for w in &tool_warnings {
+        warn!("Custom tool config: {}", w);
+    }
+    for tool_def in &config.custom_tools {
+        if !tool_enabled(&tool_def.name) {
+            continue;
+        }
+        // Skip tools with empty commands (caught by validate_custom_tools)
+        if tool_def.command.trim().is_empty() {
+            warn!(tool = %tool_def.name, "Skipping custom tool with empty command");
+            continue;
+        }
+        let tool = zeptoclaw::tools::custom::CustomTool::new(tool_def.clone());
+        agent.register_tool(Box::new(tool)).await;
+        info!(tool = %tool_def.name, "Registered custom CLI tool");
     }
 
     info!("Registered {} tools", agent.tool_count().await);

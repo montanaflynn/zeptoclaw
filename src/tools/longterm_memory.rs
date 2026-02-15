@@ -47,6 +47,10 @@ impl Tool for LongTermMemoryTool {
         "Store and retrieve long-term memories (facts, preferences, learnings) that persist across sessions. Use 'set' to remember something, 'get' to recall by key, 'search' to find memories by keyword."
     }
 
+    fn compact_description(&self) -> &str {
+        "Long-term memory store"
+    }
+
     fn parameters(&self) -> Value {
         json!({
             "type": "object",

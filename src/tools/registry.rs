@@ -217,6 +217,25 @@ impl ToolRegistry {
             .collect()
     }
 
+    /// Get tool definitions, optionally using compact descriptions.
+    ///
+    /// When `compact` is true, tools that override `compact_description()`
+    /// will use their shorter descriptions, saving tokens for constrained contexts.
+    pub fn definitions_with_options(&self, compact: bool) -> Vec<ToolDefinition> {
+        self.tools
+            .values()
+            .map(|t| ToolDefinition {
+                name: t.name().to_string(),
+                description: if compact {
+                    t.compact_description().to_string()
+                } else {
+                    t.description().to_string()
+                },
+                parameters: t.parameters(),
+            })
+            .collect()
+    }
+
     /// Get the names of all registered tools.
     ///
     /// # Returns
@@ -441,5 +460,23 @@ mod tests {
         // Should still have only one tool
         assert_eq!(registry.len(), 1);
         assert!(registry.has("echo"));
+    }
+
+    #[test]
+    fn test_definitions_with_options_normal() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Box::new(EchoTool));
+        let defs = registry.definitions_with_options(false);
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].description, "Echoes back the provided message");
+    }
+
+    #[test]
+    fn test_definitions_with_options_compact() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Box::new(EchoTool));
+        let defs = registry.definitions_with_options(true);
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].description, "Echo message");
     }
 }

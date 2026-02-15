@@ -4,6 +4,7 @@
 //! All types implement serde traits for JSON serialization and have sensible defaults.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Main configuration struct for ZeptoClaw
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +53,13 @@ pub struct Config {
     pub mcp: McpConfig,
     /// Routines (event/webhook/cron triggers) configuration
     pub routines: RoutinesConfig,
+    /// Custom CLI-defined tools (shell commands as agent tools).
+    #[serde(default)]
+    pub custom_tools: Vec<CustomToolDef>,
+    /// Named tool profiles for per-channel/context tool filtering.
+    /// Key = profile name, Value = None means all tools, Some(vec) means only those tools.
+    #[serde(default)]
+    pub tool_profiles: HashMap<String, Option<Vec<String>>>,
 }
 
 // ============================================================================
@@ -165,6 +173,12 @@ pub struct AgentDefaults {
     pub streaming: bool,
     /// Per-session token budget (input + output). 0 = unlimited.
     pub token_budget: u64,
+    /// Use compact (shorter) tool descriptions to save tokens.
+    #[serde(default)]
+    pub compact_tools: bool,
+    /// Default tool profile name (from `tool_profiles`). Omit for all tools.
+    #[serde(default)]
+    pub tool_profile: Option<String>,
 }
 
 /// Default model compile-time configuration.
@@ -186,6 +200,8 @@ impl Default for AgentDefaults {
             message_queue_mode: MessageQueueMode::default(),
             streaming: false,
             token_budget: 0,
+            compact_tools: false,
+            tool_profile: None,
         }
     }
 }
@@ -962,6 +978,51 @@ impl Default for ContainerAgentConfig {
     }
 }
 
+/// A tool defined as a shell command in config.
+///
+/// Custom tools let users expose any shell command as an agent tool
+/// without writing Rust code, plugin manifests, or MCP servers.
+///
+/// # Example
+///
+/// ```
+/// use zeptoclaw::config::CustomToolDef;
+/// use std::collections::HashMap;
+///
+/// let def = CustomToolDef {
+///     name: "cpu_temp".to_string(),
+///     description: "Read CPU temperature".to_string(),
+///     command: "cat /sys/class/thermal/thermal_zone0/temp".to_string(),
+///     parameters: None,
+///     working_dir: None,
+///     timeout_secs: None,
+///     env: None,
+/// };
+/// assert_eq!(def.name, "cpu_temp");
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomToolDef {
+    /// Tool name (alphanumeric + underscore only, used by LLM to invoke).
+    pub name: String,
+    /// Short description (keep under 60 chars for token efficiency).
+    pub description: String,
+    /// Shell command to execute. Supports {{param}} interpolation.
+    pub command: String,
+    /// Optional parameter definitions. Keys are param names, values are JSON Schema types.
+    /// If omitted, tool takes no parameters (zero schema overhead).
+    #[serde(default)]
+    pub parameters: Option<HashMap<String, String>>,
+    /// Optional working directory override.
+    #[serde(default)]
+    pub working_dir: Option<String>,
+    /// Command timeout in seconds (default: 30).
+    #[serde(default)]
+    pub timeout_secs: Option<u64>,
+    /// Optional environment variables.
+    #[serde(default)]
+    pub env: Option<HashMap<String, String>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1044,5 +1105,100 @@ mod tests {
         let json = r#"{"enabled": true, "interval_secs": 600}"#;
         let config: HeartbeatConfig = serde_json::from_str(json).unwrap();
         assert!(config.deliver_to.is_none());
+    }
+
+    #[test]
+    fn test_custom_tool_def_deserialize() {
+        let json = r#"{
+            "name": "cpu_temp",
+            "description": "Read CPU temp",
+            "command": "cat /sys/class/thermal/thermal_zone0/temp",
+            "parameters": {"zone": "string"},
+            "working_dir": "/tmp",
+            "timeout_secs": 10,
+            "env": {"LANG": "C"}
+        }"#;
+        let def: CustomToolDef = serde_json::from_str(json).unwrap();
+        assert_eq!(def.name, "cpu_temp");
+        assert_eq!(def.description, "Read CPU temp");
+        assert_eq!(def.command, "cat /sys/class/thermal/thermal_zone0/temp");
+        assert_eq!(
+            def.parameters.as_ref().unwrap().get("zone").unwrap(),
+            "string"
+        );
+        assert_eq!(def.working_dir.as_ref().unwrap(), "/tmp");
+        assert_eq!(def.timeout_secs.unwrap(), 10);
+        assert_eq!(def.env.as_ref().unwrap().get("LANG").unwrap(), "C");
+    }
+
+    #[test]
+    fn test_custom_tool_def_minimal() {
+        let json = r#"{"name": "test", "description": "Test tool", "command": "echo hi"}"#;
+        let def: CustomToolDef = serde_json::from_str(json).unwrap();
+        assert_eq!(def.name, "test");
+        assert!(def.parameters.is_none());
+        assert!(def.working_dir.is_none());
+        assert!(def.timeout_secs.is_none());
+        assert!(def.env.is_none());
+    }
+
+    #[test]
+    fn test_custom_tool_def_with_parameters() {
+        let json = r#"{
+            "name": "search_logs",
+            "description": "Search logs",
+            "command": "grep {{pattern}} /var/log/app.log",
+            "parameters": {"pattern": "string"}
+        }"#;
+        let def: CustomToolDef = serde_json::from_str(json).unwrap();
+        let params = def.parameters.unwrap();
+        assert_eq!(params.len(), 1);
+        assert_eq!(params.get("pattern").unwrap(), "string");
+    }
+
+    #[test]
+    fn test_custom_tools_default_empty() {
+        let config = Config::default();
+        assert!(config.custom_tools.is_empty());
+    }
+
+    #[test]
+    fn test_tool_profiles_deserialize() {
+        let json = r#"{
+            "tool_profiles": {
+                "minimal": ["shell", "longterm_memory"],
+                "full": null
+            }
+        }"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.tool_profiles.len(), 2);
+        let minimal = config.tool_profiles.get("minimal").unwrap();
+        assert_eq!(minimal.as_ref().unwrap().len(), 2);
+        assert!(config.tool_profiles.get("full").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_tool_profiles_default_empty() {
+        let config = Config::default();
+        assert!(config.tool_profiles.is_empty());
+    }
+
+    #[test]
+    fn test_compact_tools_default_false() {
+        let defaults = AgentDefaults::default();
+        assert!(!defaults.compact_tools);
+        assert!(defaults.tool_profile.is_none());
+    }
+
+    #[test]
+    fn test_compact_tools_deserialize() {
+        let json =
+            r#"{"agents": {"defaults": {"compact_tools": true, "tool_profile": "minimal"}}}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert!(config.agents.defaults.compact_tools);
+        assert_eq!(
+            config.agents.defaults.tool_profile.as_ref().unwrap(),
+            "minimal"
+        );
     }
 }

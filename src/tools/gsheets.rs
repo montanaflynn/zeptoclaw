@@ -257,6 +257,10 @@ impl Tool for GoogleSheetsTool {
         "Read and write Google Sheets data ranges."
     }
 
+    fn compact_description(&self) -> &str {
+        "Google Sheets"
+    }
+
     fn parameters(&self) -> Value {
         json!({
             "type": "object",
