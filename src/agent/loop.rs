@@ -379,7 +379,7 @@ impl AgentLoop {
         // Get tool definitions (short-lived read lock)
         let tool_definitions = {
             let tools = self.tools.read().await;
-            tools.definitions()
+            tools.definitions_with_options(self.config.agents.defaults.compact_tools)
         };
 
         // Build chat options
@@ -588,7 +588,7 @@ impl AgentLoop {
             // Get fresh tool definitions for the next LLM call
             let tool_definitions = {
                 let tools = self.tools.read().await;
-                tools.definitions()
+                tools.definitions_with_options(self.config.agents.defaults.compact_tools)
             };
 
             // Check token budget before next LLM call
@@ -694,7 +694,7 @@ impl AgentLoop {
 
         let tool_definitions = {
             let tools = self.tools.read().await;
-            tools.definitions()
+            tools.definitions_with_options(self.config.agents.defaults.compact_tools)
         };
 
         let options = ChatOptions::new()
@@ -859,7 +859,7 @@ impl AgentLoop {
 
             let tool_definitions = {
                 let tools = self.tools.read().await;
-                tools.definitions()
+                tools.definitions_with_options(self.config.agents.defaults.compact_tools)
             };
 
             // Check token budget before next LLM call
@@ -898,7 +898,7 @@ impl AgentLoop {
 
             let tool_definitions = {
                 let tools = self.tools.read().await;
-                tools.definitions()
+                tools.definitions_with_options(self.config.agents.defaults.compact_tools)
             };
 
             let stream_rx = provider
