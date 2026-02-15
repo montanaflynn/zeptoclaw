@@ -38,6 +38,28 @@ pub(crate) async fn cmd_agent(
         create_agent(config.clone(), bus.clone()).await?
     };
 
+    // Set up tool execution feedback (shows progress on stderr)
+    let (feedback_tx, mut feedback_rx) = tokio::sync::mpsc::unbounded_channel();
+    agent.set_tool_feedback(feedback_tx).await;
+
+    // Spawn feedback printer to stderr
+    tokio::spawn(async move {
+        use zeptoclaw::agent::ToolFeedbackPhase;
+        while let Some(fb) = feedback_rx.recv().await {
+            match fb.phase {
+                ToolFeedbackPhase::Starting => {
+                    eprint!("  [{}] Running...", fb.tool_name);
+                }
+                ToolFeedbackPhase::Done { elapsed_ms } => {
+                    eprintln!(" done ({:.1}s)", elapsed_ms as f64 / 1000.0);
+                }
+                ToolFeedbackPhase::Failed { elapsed_ms, error } => {
+                    eprintln!(" failed ({:.1}s): {}", elapsed_ms as f64 / 1000.0, error);
+                }
+            }
+        }
+    });
+
     // Check whether the runtime can use at least one configured provider.
     if resolve_runtime_provider(&config).is_none() {
         let configured = configured_provider_names(&config);
