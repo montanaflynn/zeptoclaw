@@ -280,6 +280,26 @@ pub(crate) async fn cmd_status() -> Result<()> {
     );
     println!("  Max results: {}", config.memory.max_results);
     println!("  Min score: {}", config.memory.min_score);
+
+    // Long-term memory stats
+    let ltm_path = Config::dir().join("memory").join("longterm.json");
+    if ltm_path.exists() {
+        match zeptoclaw::memory::longterm::LongTermMemory::new() {
+            Ok(mem) => {
+                let count = mem.count();
+                let categories = mem.categories();
+                println!("  Long-term entries: {}", count);
+                if !categories.is_empty() {
+                    println!("  Categories: {}", categories.join(", "));
+                }
+            }
+            Err(_) => {
+                println!("  Long-term memory: error reading");
+            }
+        }
+    } else {
+        println!("  Long-term entries: 0 (no data file)");
+    }
     println!();
 
     // Heartbeat
