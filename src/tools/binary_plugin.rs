@@ -381,128 +381,104 @@ mod tests {
     }
 
     // ---- Execute tests with real processes ----
+    //
+    // These tests create shell scripts and execute them as binary plugins.
+    // We use a TempDir + explicit script file rather than NamedTempFile to
+    // ensure the script is in a directory that allows execution (some CI
+    // environments mount /tmp with noexec).
 
     #[cfg(unix)]
-    fn create_test_script(content: &str) -> tempfile::NamedTempFile {
-        use std::io::Write;
+    fn create_test_script(content: &str) -> (tempfile::TempDir, PathBuf) {
         use std::os::unix::fs::PermissionsExt;
 
-        let mut file = tempfile::NamedTempFile::new().unwrap();
-        write!(file, "#!/bin/sh\n{}", content).unwrap();
-        file.flush().unwrap();
-
-        let path = file.path().to_path_buf();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-
-        file
+        let dir = tempfile::TempDir::new().unwrap();
+        let script_path = dir.path().join("plugin.sh");
+        std::fs::write(&script_path, format!("#!/bin/sh\n{}", content)).unwrap();
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        (dir, script_path)
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_success() {
-        let script = create_test_script(
+        let (_dir, script_path) = create_test_script(
             r#"read input
 echo '{"jsonrpc":"2.0","result":{"output":"hello world"},"id":1}'"#,
         );
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({"x": "test"}), &ctx).await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
         assert_eq!(result.unwrap(), "hello world");
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_error_response() {
-        let script = create_test_script(
+        let (_dir, script_path) = create_test_script(
             r#"read input
 echo '{"jsonrpc":"2.0","error":{"code":-1,"message":"something broke"},"id":1}'"#,
         );
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("something broke"));
-        assert!(err.contains("code -1"));
+        assert!(err.contains("something broke"), "err was: {}", err);
+        assert!(err.contains("code -1"), "err was: {}", err);
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_non_zero_exit() {
-        let script = create_test_script("exit 1");
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
+        let (_dir, script_path) = create_test_script("exit 1");
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("exited with code 1"));
+        assert!(err.contains("exited with code 1"), "err was: {}", err);
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_timeout() {
-        let script = create_test_script("sleep 10");
+        let (_dir, script_path) = create_test_script("sleep 10");
         let tool = BinaryPluginTool::new(
             test_tool_def(),
             "test-plugin",
-            script.path().to_path_buf(),
+            script_path,
             1, // 1 second timeout
         );
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("timed out"));
+        assert!(err.contains("timed out"), "err was: {}", err);
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_malformed_json() {
-        let script = create_test_script("echo 'not json at all'");
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
+        let (_dir, script_path) = create_test_script("echo 'not json at all'");
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("invalid JSON-RPC"));
+        assert!(err.contains("invalid JSON-RPC"), "err was: {}", err);
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_empty_stdout() {
-        let script = create_test_script("# produces nothing");
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
+        let (_dir, script_path) = create_test_script("# produces nothing");
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("no output"));
+        assert!(err.contains("no output"), "err was: {}", err);
     }
 
     #[cfg(unix)]
@@ -518,14 +494,13 @@ echo '{"jsonrpc":"2.0","error":{"code":-1,"message":"something broke"},"id":1}'"
         let result = tool.execute(json!({}), &ctx).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("Failed to spawn"));
+        assert!(err.contains("Failed to spawn"), "err was: {}", err);
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_with_args() {
-        // Script checks that stdin contains the expected args
-        let script = create_test_script(
+        let (_dir, script_path) = create_test_script(
             r#"read input
 if echo "$input" | grep -q '"x"'; then
     echo '{"jsonrpc":"2.0","result":{"output":"args received"},"id":1}'
@@ -533,45 +508,34 @@ else
     echo '{"jsonrpc":"2.0","error":{"code":-1,"message":"no args"},"id":1}'
 fi"#,
         );
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({"x": "hello"}), &ctx).await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
         assert_eq!(result.unwrap(), "args received");
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_with_workspace() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let script = create_test_script(
+        let workspace = tempfile::TempDir::new().unwrap();
+        let (_dir, script_path) = create_test_script(
             r#"read input
 cwd=$(pwd)
 echo "{\"jsonrpc\":\"2.0\",\"result\":{\"output\":\"cwd: $cwd\"},\"id\":1}""#,
         );
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
-        let ctx = ToolContext::new().with_workspace(tmp.path().to_str().unwrap());
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
+        let ctx = ToolContext::new().with_workspace(workspace.path().to_str().unwrap());
         let result = tool.execute(json!({}), &ctx).await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
         let output = result.unwrap();
-        // The canonical path should contain the tmpdir name
-        assert!(output.contains("cwd:"));
+        assert!(output.contains("cwd:"), "output was: {}", output);
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_with_env() {
-        let script = create_test_script(
+        let (_dir, script_path) = create_test_script(
             r#"read input
 echo "{\"jsonrpc\":\"2.0\",\"result\":{\"output\":\"FOO=$MY_TEST_VAR\"},\"id\":1}""#,
         );
@@ -582,95 +546,74 @@ echo "{\"jsonrpc\":\"2.0\",\"result\":{\"output\":\"FOO=$MY_TEST_VAR\"},\"id\":1
         let mut def = test_tool_def();
         def.env = Some(env);
 
-        let tool = BinaryPluginTool::new(def, "test-plugin", script.path().to_path_buf(), 30);
+        let tool = BinaryPluginTool::new(def, "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
         assert_eq!(result.unwrap(), "FOO=bar_value");
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_stderr_on_failure() {
-        let script = create_test_script(
+        let (_dir, script_path) = create_test_script(
             r#"echo "error details" >&2
 exit 1"#,
         );
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("error details"));
+        assert!(err.contains("error details"), "err was: {}", err);
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_binary_not_executable() {
-        use std::io::Write;
+        let dir = tempfile::TempDir::new().unwrap();
+        let script_path = dir.path().join("plugin.sh");
+        std::fs::write(&script_path, "#!/bin/sh\necho ok").unwrap();
+        // Do NOT set execute permission — leave default (0o644 on most systems)
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o644)).unwrap();
 
-        let mut file = tempfile::NamedTempFile::new().unwrap();
-        write!(file, "#!/bin/sh\necho ok").unwrap();
-        file.flush().unwrap();
-        // Do NOT set execute permission
-
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            file.path().to_path_buf(),
-            30,
-        );
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("Failed to spawn"));
+        assert!(err.contains("Failed to spawn"), "err was: {}", err);
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_large_output() {
-        let script = create_test_script(
+        let (_dir, script_path) = create_test_script(
             r#"read input
 large=$(python3 -c "print('x' * 10000)" 2>/dev/null || printf 'x%.0s' $(seq 1 10000))
 echo "{\"jsonrpc\":\"2.0\",\"result\":{\"output\":\"$large\"},\"id\":1}""#,
         );
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
         assert!(result.unwrap().len() >= 10000);
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn test_execute_extra_stdout_ignored() {
-        // Script emits debug lines before the JSON-RPC response
-        let script = create_test_script(
+        let (_dir, script_path) = create_test_script(
             r#"read input
 echo "debug: starting up"
 echo "debug: processing"
 echo '{"jsonrpc":"2.0","result":{"output":"final answer"},"id":1}'"#,
         );
-        let tool = BinaryPluginTool::new(
-            test_tool_def(),
-            "test-plugin",
-            script.path().to_path_buf(),
-            30,
-        );
+        let tool = BinaryPluginTool::new(test_tool_def(), "test-plugin", script_path, 30);
         let ctx = ToolContext::new();
         let result = tool.execute(json!({}), &ctx).await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
         assert_eq!(result.unwrap(), "final answer");
     }
 }
