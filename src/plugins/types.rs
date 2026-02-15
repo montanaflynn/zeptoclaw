@@ -9,6 +9,16 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// Default execution mode for plugins.
+fn default_execution() -> String {
+    "command".to_string()
+}
+
+/// Default protocol for binary plugins.
+fn default_protocol() -> String {
+    "jsonrpc".to_string()
+}
+
 /// The manifest loaded from a plugin's `plugin.json` file.
 ///
 /// Each plugin directory must contain a `plugin.json` file that conforms
@@ -58,6 +68,32 @@ pub struct PluginManifest {
 
     /// List of tool definitions provided by this plugin.
     pub tools: Vec<PluginToolDef>,
+
+    /// Execution mode: "command" (default) or "binary" (JSON-RPC stdin/stdout).
+    #[serde(default = "default_execution")]
+    pub execution: String,
+
+    /// Binary plugin configuration. Required when execution is "binary".
+    #[serde(default)]
+    pub binary: Option<BinaryPluginConfig>,
+}
+
+/// Configuration for binary plugin execution.
+///
+/// Binary plugins are standalone executables that communicate via JSON-RPC 2.0
+/// over stdin/stdout. They are spawned on-demand per tool call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BinaryPluginConfig {
+    /// Relative path to binary within plugin directory.
+    pub path: String,
+
+    /// Protocol: only "jsonrpc" supported.
+    #[serde(default = "default_protocol")]
+    pub protocol: String,
+
+    /// Optional timeout override in seconds (default: 30).
+    #[serde(default)]
+    pub timeout_secs: Option<u64>,
 }
 
 /// A tool definition within a plugin manifest.
@@ -80,6 +116,8 @@ pub struct PluginToolDef {
 
     /// Shell command template. Uses `{{param_name}}` for parameter interpolation.
     /// Must not contain dangerous shell operators (&&, ||, ;, |, backticks).
+    /// Empty for binary plugins.
+    #[serde(default)]
     pub command: String,
 
     /// Optional working directory for command execution.
@@ -93,6 +131,13 @@ pub struct PluginToolDef {
     /// Optional environment variables to set during command execution.
     #[serde(default)]
     pub env: Option<HashMap<String, String>>,
+}
+
+impl PluginManifest {
+    /// Returns true if this plugin uses binary execution mode.
+    pub fn is_binary(&self) -> bool {
+        self.execution == "binary"
+    }
 }
 
 impl PluginToolDef {
@@ -221,6 +266,8 @@ mod tests {
                 timeout_secs: Some(15),
                 env: None,
             }],
+            execution: "command".to_string(),
+            binary: None,
         };
 
         let json_str = serde_json::to_string(&manifest).unwrap();
@@ -407,6 +454,8 @@ mod tests {
                 timeout_secs: None,
                 env: None,
             }],
+            execution: "command".to_string(),
+            binary: None,
         };
 
         let plugin = Plugin::new(manifest, PathBuf::from("/tmp/test-plugin"));
@@ -468,5 +517,125 @@ mod tests {
         assert!(params["properties"]["query"].is_object());
         assert!(params["properties"]["max_results"].is_object());
         assert_eq!(params["required"][0], "query");
+    }
+
+    // ---- Binary plugin types tests ----
+
+    #[test]
+    fn test_manifest_default_execution_is_command() {
+        let json_str = r#"{
+            "name": "basic-plugin",
+            "version": "1.0.0",
+            "description": "Basic",
+            "tools": [{
+                "name": "t",
+                "description": "d",
+                "parameters": {},
+                "command": "echo"
+            }]
+        }"#;
+        let manifest: PluginManifest = serde_json::from_str(json_str).unwrap();
+        assert_eq!(manifest.execution, "command");
+        assert!(manifest.binary.is_none());
+        assert!(!manifest.is_binary());
+    }
+
+    #[test]
+    fn test_manifest_binary_deserialization() {
+        let json_str = r#"{
+            "name": "bin-plugin",
+            "version": "1.0.0",
+            "description": "Binary plugin",
+            "execution": "binary",
+            "binary": {
+                "path": "bin/my-plugin",
+                "protocol": "jsonrpc",
+                "timeout_secs": 60
+            },
+            "tools": [{
+                "name": "my_tool",
+                "description": "Does stuff",
+                "parameters": {"type": "object", "properties": {}}
+            }]
+        }"#;
+        let manifest: PluginManifest = serde_json::from_str(json_str).unwrap();
+        assert_eq!(manifest.execution, "binary");
+        assert!(manifest.is_binary());
+        let bin = manifest.binary.unwrap();
+        assert_eq!(bin.path, "bin/my-plugin");
+        assert_eq!(bin.protocol, "jsonrpc");
+        assert_eq!(bin.timeout_secs, Some(60));
+        // command defaults to empty for binary plugins
+        assert_eq!(manifest.tools[0].command, "");
+    }
+
+    #[test]
+    fn test_manifest_binary_config_defaults() {
+        let json_str = r#"{
+            "name": "bin-plugin",
+            "version": "1.0.0",
+            "description": "Minimal binary",
+            "execution": "binary",
+            "binary": { "path": "plugin" },
+            "tools": [{
+                "name": "t",
+                "description": "d",
+                "parameters": {}
+            }]
+        }"#;
+        let manifest: PluginManifest = serde_json::from_str(json_str).unwrap();
+        let bin = manifest.binary.unwrap();
+        assert_eq!(bin.protocol, "jsonrpc");
+        assert!(bin.timeout_secs.is_none());
+    }
+
+    #[test]
+    fn test_manifest_is_binary() {
+        let command_manifest = PluginManifest {
+            name: "cmd".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Command".to_string(),
+            author: None,
+            tools: vec![],
+            execution: "command".to_string(),
+            binary: None,
+        };
+        assert!(!command_manifest.is_binary());
+
+        let binary_manifest = PluginManifest {
+            name: "bin".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Binary".to_string(),
+            author: None,
+            tools: vec![],
+            execution: "binary".to_string(),
+            binary: Some(BinaryPluginConfig {
+                path: "plugin".to_string(),
+                protocol: "jsonrpc".to_string(),
+                timeout_secs: None,
+            }),
+        };
+        assert!(binary_manifest.is_binary());
+    }
+
+    #[test]
+    fn test_manifest_backward_compat_no_execution_field() {
+        // Old-style manifests without execution/binary fields should still work
+        let json_str = r#"{
+            "name": "old-plugin",
+            "version": "1.0.0",
+            "description": "Old style",
+            "tools": [{
+                "name": "old_tool",
+                "description": "Old tool",
+                "parameters": {},
+                "command": "echo hello"
+            }]
+        }"#;
+        let manifest: PluginManifest = serde_json::from_str(json_str).unwrap();
+        assert_eq!(manifest.execution, "command");
+        assert!(manifest.binary.is_none());
+        assert!(!manifest.is_binary());
+        assert_eq!(manifest.tools[0].command, "echo hello");
     }
 }

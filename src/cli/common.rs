@@ -432,6 +432,78 @@ Enable runtime.allow_fallback_to_native to opt in to native fallback.",
         agent.register_tool(Box::new(R8rTool::default())).await;
     }
 
+    // Register plugin tools (command-mode and binary-mode)
+    if config.plugins.enabled {
+        let plugin_dirs: Vec<PathBuf> = config
+            .plugins
+            .plugin_dirs
+            .iter()
+            .map(|d| expand_tilde(d))
+            .collect();
+        match zeptoclaw::plugins::discover_plugins(&plugin_dirs) {
+            Ok(plugins) => {
+                for plugin in plugins {
+                    if !config.plugins.is_plugin_permitted(plugin.name()) {
+                        info!(plugin = %plugin.name(), "Plugin blocked by config");
+                        continue;
+                    }
+                    for tool_def in &plugin.manifest.tools {
+                        if !tool_enabled(&tool_def.name) {
+                            continue;
+                        }
+                        if plugin.manifest.is_binary() {
+                            if let Some(ref bin_cfg) = plugin.manifest.binary {
+                                match zeptoclaw::plugins::validate_binary_path(
+                                    &plugin.path,
+                                    bin_cfg,
+                                ) {
+                                    Ok(bin_path) => {
+                                        let timeout = bin_cfg
+                                            .timeout_secs
+                                            .unwrap_or_else(|| tool_def.effective_timeout());
+                                        agent
+                                            .register_tool(Box::new(
+                                                zeptoclaw::tools::binary_plugin::BinaryPluginTool::new(
+                                                    tool_def.clone(),
+                                                    plugin.name(),
+                                                    bin_path,
+                                                    timeout,
+                                                ),
+                                            ))
+                                            .await;
+                                        info!(
+                                            plugin = %plugin.name(),
+                                            tool = %tool_def.name,
+                                            "Registered binary plugin tool"
+                                        );
+                                    }
+                                    Err(e) => warn!(
+                                        plugin = %plugin.name(),
+                                        error = %e,
+                                        "Binary validation failed"
+                                    ),
+                                }
+                            }
+                        } else {
+                            agent
+                                .register_tool(Box::new(zeptoclaw::tools::plugin::PluginTool::new(
+                                    tool_def.clone(),
+                                    plugin.name(),
+                                )))
+                                .await;
+                            info!(
+                                plugin = %plugin.name(),
+                                tool = %tool_def.name,
+                                "Registered command plugin tool"
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => warn!(error = %e, "Plugin discovery failed"),
+        }
+    }
+
     info!("Registered {} tools", agent.tool_count().await);
 
     // Set up provider

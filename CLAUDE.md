@@ -97,8 +97,9 @@ src/
 ├── security/       # Shell blocklist, path validation, mount policy
 ├── session/        # Session, message persistence, conversation history
 ├── skills/         # Markdown-based skill system (OpenClaw-compatible, loader, types)
-├── plugins/        # Plugin system (JSON manifest, discovery, registry)
-├── tools/          # Agent tools (17 tools + MCP)
+├── plugins/        # Plugin system (JSON manifest, discovery, registry, binary mode)
+├── tools/          # Agent tools (17 tools + MCP + binary plugins)
+│   ├── binary_plugin.rs # Binary plugin adapter (JSON-RPC 2.0 stdin/stdout)
 │   ├── shell.rs       # Shell execution with runtime isolation
 │   ├── filesystem.rs  # Read, write, list, edit files
 │   ├── web.rs         # Web search (Brave) and fetch with SSRF protection

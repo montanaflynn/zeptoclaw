@@ -327,7 +327,11 @@ mod tests {
         let selected = resolve_runtime_provider(&config).expect("provider should resolve");
         assert_eq!(selected.name, "gemini");
         assert_eq!(selected.backend, "openai");
-        assert!(selected.api_base.as_deref().unwrap().contains("generativelanguage"));
+        assert!(selected
+            .api_base
+            .as_deref()
+            .unwrap()
+            .contains("generativelanguage"));
     }
 
     #[test]

@@ -12,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::error::{Result, ZeptoError};
 
-use super::types::{Plugin, PluginManifest};
+use super::types::{BinaryPluginConfig, Plugin, PluginManifest};
 
 /// Discover plugins across multiple directories.
 ///
@@ -177,6 +177,57 @@ pub fn validate_manifest(manifest: &PluginManifest) -> Result<()> {
         )));
     }
 
+    // Validate execution mode
+    match manifest.execution.as_str() {
+        "command" => {}
+        "binary" => {
+            // Binary plugins must have binary config
+            let bin_cfg = manifest.binary.as_ref().ok_or_else(|| {
+                ZeptoError::Config(format!(
+                    "Plugin '{}' has execution \"binary\" but no binary config",
+                    manifest.name
+                ))
+            })?;
+
+            // Only jsonrpc protocol supported
+            if bin_cfg.protocol != "jsonrpc" {
+                return Err(ZeptoError::Config(format!(
+                    "Plugin '{}' has unsupported binary protocol '{}': only \"jsonrpc\" is supported",
+                    manifest.name, bin_cfg.protocol
+                )));
+            }
+
+            // Path must be non-empty
+            if bin_cfg.path.trim().is_empty() {
+                return Err(ZeptoError::Config(format!(
+                    "Plugin '{}' has empty binary path",
+                    manifest.name
+                )));
+            }
+
+            // Reject path traversal and absolute paths
+            if bin_cfg.path.contains("..") {
+                return Err(ZeptoError::SecurityViolation(format!(
+                    "Plugin '{}' binary path contains '..': path traversal not allowed",
+                    manifest.name
+                )));
+            }
+
+            if Path::new(&bin_cfg.path).is_absolute() {
+                return Err(ZeptoError::SecurityViolation(format!(
+                    "Plugin '{}' binary path must be relative, not absolute",
+                    manifest.name
+                )));
+            }
+        }
+        other => {
+            return Err(ZeptoError::Config(format!(
+                "Plugin '{}' has unknown execution mode '{}': must be \"command\" or \"binary\"",
+                manifest.name, other
+            )));
+        }
+    }
+
     // Validate each tool
     let tool_name_re = Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]{0,63}$").unwrap();
     for tool in &manifest.tools {
@@ -187,11 +238,90 @@ pub fn validate_manifest(manifest: &PluginManifest) -> Result<()> {
             )));
         }
 
-        // Check for dangerous shell patterns in the command template
-        validate_command_safety(&tool.command, &tool.name, &manifest.name)?;
+        // Only check command safety for command-mode plugins
+        if !manifest.is_binary() {
+            validate_command_safety(&tool.command, &tool.name, &manifest.name)?;
+        }
     }
 
     Ok(())
+}
+
+/// Validate binary exists, is a file, is executable, and stays within plugin dir.
+///
+/// Canonicalizes both paths and verifies the binary does not escape the plugin
+/// directory (e.g. via symlinks). On Unix, also checks the execute permission bit.
+///
+/// # Arguments
+/// * `plugin_dir` - The plugin's root directory
+/// * `binary_config` - The binary plugin configuration containing the relative path
+///
+/// # Returns
+/// The canonicalized absolute path to the binary, or an error.
+pub fn validate_binary_path(
+    plugin_dir: &Path,
+    binary_config: &BinaryPluginConfig,
+) -> Result<PathBuf> {
+    let binary_path = plugin_dir.join(&binary_config.path);
+
+    if !binary_path.exists() {
+        return Err(ZeptoError::Config(format!(
+            "Binary not found: {}",
+            binary_path.display()
+        )));
+    }
+
+    if !binary_path.is_file() {
+        return Err(ZeptoError::Config(format!(
+            "Binary path is not a file: {}",
+            binary_path.display()
+        )));
+    }
+
+    // Canonicalize to resolve symlinks and check containment
+    let canonical_dir = plugin_dir.canonicalize().map_err(|e| {
+        ZeptoError::Config(format!(
+            "Failed to canonicalize plugin dir {}: {}",
+            plugin_dir.display(),
+            e
+        ))
+    })?;
+    let canonical_bin = binary_path.canonicalize().map_err(|e| {
+        ZeptoError::Config(format!(
+            "Failed to canonicalize binary path {}: {}",
+            binary_path.display(),
+            e
+        ))
+    })?;
+
+    if !canonical_bin.starts_with(&canonical_dir) {
+        return Err(ZeptoError::SecurityViolation(format!(
+            "Binary escapes plugin directory: {} is outside {}",
+            canonical_bin.display(),
+            canonical_dir.display()
+        )));
+    }
+
+    // Check execute bit on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = binary_path.metadata().map_err(|e| {
+            ZeptoError::Config(format!(
+                "Failed to read permissions for {}: {}",
+                binary_path.display(),
+                e
+            ))
+        })?;
+        if perms.permissions().mode() & 0o111 == 0 {
+            return Err(ZeptoError::Config(format!(
+                "Binary is not executable: {}",
+                binary_path.display()
+            )));
+        }
+    }
+
+    Ok(canonical_bin)
 }
 
 /// Check a command template for dangerous shell operators.
@@ -254,6 +384,8 @@ mod tests {
                 timeout_secs: None,
                 env: None,
             }],
+            execution: "command".to_string(),
+            binary: None,
         }
     }
 
@@ -663,5 +795,172 @@ mod tests {
         });
         let result = validate_manifest(&manifest);
         assert!(result.is_err());
+    }
+
+    // ---- binary plugin validation tests ----
+
+    fn binary_manifest() -> PluginManifest {
+        PluginManifest {
+            name: "bin-plugin".to_string(),
+            version: "1.0.0".to_string(),
+            description: "Binary plugin".to_string(),
+            author: None,
+            tools: vec![PluginToolDef {
+                name: "bin_tool".to_string(),
+                description: "A binary tool".to_string(),
+                parameters: json!({"type": "object", "properties": {}}),
+                command: String::new(),
+                working_dir: None,
+                timeout_secs: None,
+                env: None,
+            }],
+            execution: "binary".to_string(),
+            binary: Some(BinaryPluginConfig {
+                path: "bin/plugin".to_string(),
+                protocol: "jsonrpc".to_string(),
+                timeout_secs: None,
+            }),
+        }
+    }
+
+    #[test]
+    fn test_validate_binary_mode_valid() {
+        let manifest = binary_manifest();
+        assert!(validate_manifest(&manifest).is_ok());
+    }
+
+    #[test]
+    fn test_validate_binary_missing_config() {
+        let mut manifest = binary_manifest();
+        manifest.binary = None;
+        let result = validate_manifest(&manifest);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no binary config"));
+    }
+
+    #[test]
+    fn test_validate_binary_unsupported_protocol() {
+        let mut manifest = binary_manifest();
+        manifest.binary.as_mut().unwrap().protocol = "grpc".to_string();
+        let result = validate_manifest(&manifest);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("unsupported binary protocol"));
+    }
+
+    #[test]
+    fn test_validate_binary_empty_path() {
+        let mut manifest = binary_manifest();
+        manifest.binary.as_mut().unwrap().path = "  ".to_string();
+        let result = validate_manifest(&manifest);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("empty binary path"));
+    }
+
+    #[test]
+    fn test_validate_binary_path_traversal_dotdot() {
+        let mut manifest = binary_manifest();
+        manifest.binary.as_mut().unwrap().path = "../escape/bin".to_string();
+        let result = validate_manifest(&manifest);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("path traversal"));
+    }
+
+    #[test]
+    fn test_validate_binary_absolute_path_rejected() {
+        let mut manifest = binary_manifest();
+        manifest.binary.as_mut().unwrap().path = "/usr/bin/evil".to_string();
+        let result = validate_manifest(&manifest);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("must be relative"));
+    }
+
+    #[test]
+    fn test_validate_invalid_execution_mode() {
+        let mut manifest = valid_manifest();
+        manifest.execution = "unknown".to_string();
+        let result = validate_manifest(&manifest);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("unknown execution mode"));
+    }
+
+    #[test]
+    fn test_validate_command_mode_still_checks_commands() {
+        let mut manifest = valid_manifest();
+        manifest.execution = "command".to_string();
+        manifest.tools[0].command = "echo hello && rm -rf /".to_string();
+        let result = validate_manifest(&manifest);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("dangerous pattern"));
+    }
+
+    #[test]
+    fn test_validate_binary_path_real_file() {
+        let tmp = TempDir::new().unwrap();
+        let bin_dir = tmp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        let bin_path = bin_dir.join("plugin");
+        fs::write(&bin_path, "#!/bin/sh\necho ok").unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let config = BinaryPluginConfig {
+            path: "bin/plugin".to_string(),
+            protocol: "jsonrpc".to_string(),
+            timeout_secs: None,
+        };
+
+        let result = validate_binary_path(tmp.path(), &config);
+        assert!(result.is_ok());
+        let canonical = result.unwrap();
+        assert!(canonical.ends_with("bin/plugin"));
+    }
+
+    #[test]
+    fn test_validate_binary_path_nonexistent() {
+        let tmp = TempDir::new().unwrap();
+        let config = BinaryPluginConfig {
+            path: "bin/missing".to_string(),
+            protocol: "jsonrpc".to_string(),
+            timeout_secs: None,
+        };
+        let result = validate_binary_path(tmp.path(), &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Binary not found"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_validate_binary_path_not_executable() {
+        let tmp = TempDir::new().unwrap();
+        let bin_path = tmp.path().join("plugin");
+        fs::write(&bin_path, "#!/bin/sh\necho ok").unwrap();
+        // Set to read-only (no execute)
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let config = BinaryPluginConfig {
+            path: "plugin".to_string(),
+            protocol: "jsonrpc".to_string(),
+            timeout_secs: None,
+        };
+        let result = validate_binary_path(tmp.path(), &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not executable"));
     }
 }

@@ -45,6 +45,8 @@ use super::types::{Plugin, PluginToolDef};
 ///         timeout_secs: None,
 ///         env: None,
 ///     }],
+///     execution: "command".to_string(),
+///     binary: None,
 /// };
 ///
 /// let plugin = Plugin::new(manifest, PathBuf::from("/tmp/example"));
@@ -239,6 +241,8 @@ mod tests {
             description: format!("Plugin {}", name),
             author: None,
             tools,
+            execution: "command".to_string(),
+            binary: None,
         };
 
         Plugin::new(manifest, PathBuf::from(format!("/tmp/{}", name)))

@@ -54,6 +54,7 @@
 //! ```
 
 pub mod approval;
+pub mod binary_plugin;
 pub mod cron;
 pub mod delegate;
 pub mod filesystem;
@@ -71,6 +72,7 @@ mod types;
 pub mod web;
 pub mod whatsapp;
 
+pub use binary_plugin::BinaryPluginTool;
 pub use delegate::DelegateTool;
 pub use gsheets::GoogleSheetsTool;
 pub use longterm_memory::LongTermMemoryTool;

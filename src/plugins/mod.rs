@@ -73,6 +73,6 @@ mod loader;
 pub mod registry;
 pub mod types;
 
-pub use loader::{discover_plugins, load_plugin, validate_manifest};
+pub use loader::{discover_plugins, load_plugin, validate_binary_path, validate_manifest};
 pub use registry::PluginRegistry;
-pub use types::{Plugin, PluginConfig, PluginManifest, PluginToolDef};
+pub use types::{BinaryPluginConfig, Plugin, PluginConfig, PluginManifest, PluginToolDef};
