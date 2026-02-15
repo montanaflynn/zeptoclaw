@@ -581,76 +581,6 @@
             line-height: 1.6;
         }
 
-        /* Security Section */
-        .security {
-            padding: 6rem 2rem;
-        }
-
-        .security-callout {
-            max-width: 700px;
-            margin: 0 auto 3rem;
-            text-align: center;
-            font-size: 1.05rem;
-            color: var(--text-secondary);
-            line-height: 1.7;
-        }
-
-        .security-callout strong {
-            color: var(--text-primary);
-        }
-
-        .security-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 1rem;
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        .security-item {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 1.25rem;
-            text-align: center;
-            transition: border-color 0.2s;
-        }
-
-        .security-item:hover {
-            border-color: var(--accent);
-        }
-
-        .security-item .sec-icon {
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .security-item h4 {
-            font-size: 0.875rem;
-            font-weight: 600;
-            margin-bottom: 0.375rem;
-        }
-
-        .security-item p {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            line-height: 1.5;
-        }
-
-        .security-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(46, 196, 182, 0.08);
-            border: 1px solid rgba(46, 196, 182, 0.2);
-            padding: 0.5rem 1rem;
-            border-radius: 100px;
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: var(--accent);
-            margin-top: 2rem;
-        }
-
         /* Providers Section */
         .providers {
             padding: 4rem 2rem;
@@ -1202,7 +1132,6 @@
             </a>
             <ul class="nav-links">
                 <li><a href="#features">Features</a></li>
-                <li><a href="#security">Security</a></li>
                 <li><a href="docs/">Docs</a></li>
                 <li><a href="#architecture">Architecture</a></li>
                 <li><a href="https://github.com/qhkm/zeptoclaw">GitHub</a></li>
@@ -1338,69 +1267,6 @@
                     <h3>Written in Rust</h3>
                     <p>Memory safety without garbage collection. 1000+ tests. Async-first with Tokio. Minimal resource usage even under heavy load.</p>
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="security" id="security">
-        <div class="container">
-            <div class="section-header">
-                <div class="section-tag">Security</div>
-                <h2>The Only Claw That Sandboxes by Default</h2>
-                <p class="section-subtitle">AI agents execute code. Most frameworks trust that nothing will go wrong.</p>
-            </div>
-
-            <p class="security-callout">
-                The OpenClaw ecosystem has seen <strong>CVE-2026-25253</strong> (CVSS 8.8 — cross-site WebSocket hijacking to RCE),
-                <strong>ClawHavoc</strong> (341 malicious skills, 9,000+ compromised installations),
-                and <strong>42,000 exposed instances</strong> with auth bypass. ZeptoClaw was built with this threat model in mind.
-            </p>
-
-            <div class="security-grid">
-                <div class="security-item">
-                    <div class="sec-icon">📦</div>
-                    <h4>Container Isolation</h4>
-                    <p>Every shell command runs in Docker or Apple Container — not on your host</p>
-                </div>
-                <div class="security-item">
-                    <div class="sec-icon">🛡️</div>
-                    <h4>Injection Detection</h4>
-                    <p>Aho-Corasick multi-pattern matcher — 17 patterns + 4 regex rules</p>
-                </div>
-                <div class="security-item">
-                    <div class="sec-icon">🔑</div>
-                    <h4>Secret Leak Scanner</h4>
-                    <p>22 regex patterns catch API keys and tokens before they reach the LLM</p>
-                </div>
-                <div class="security-item">
-                    <div class="sec-icon">📜</div>
-                    <h4>Policy Engine</h4>
-                    <p>7 rules blocking system file access, SQL injection, encoded exploits</p>
-                </div>
-                <div class="security-item">
-                    <div class="sec-icon">🔍</div>
-                    <h4>Input Validator</h4>
-                    <p>100KB limit, null byte detection, whitespace ratio, repetition analysis</p>
-                </div>
-                <div class="security-item">
-                    <div class="sec-icon">🚫</div>
-                    <h4>Shell Blocklist</h4>
-                    <p>Regex patterns blocking reverse shells, rm -rf, privilege escalation</p>
-                </div>
-                <div class="security-item">
-                    <div class="sec-icon">🌐</div>
-                    <h4>SSRF Prevention</h4>
-                    <p>DNS pinning, private IP blocking, scheme validation for all web requests</p>
-                </div>
-                <div class="security-item">
-                    <div class="sec-icon">✋</div>
-                    <h4>Tool Approval Gate</h4>
-                    <p>Require explicit confirmation before executing dangerous tools</p>
-                </div>
-            </div>
-
-            <div style="text-align: center;">
-                <div class="security-badge">Every layer enabled by default. No flags to remember.</div>
             </div>
         </div>
     </section>
