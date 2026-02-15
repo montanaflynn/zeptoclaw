@@ -33,8 +33,7 @@ async fn cmd_encrypt() -> Result<()> {
     let content = std::fs::read_to_string(&path)?;
     let mut root: Value = serde_json::from_str(&content)?;
 
-    let enc = resolve_master_key(true)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let enc = resolve_master_key(true).map_err(|e| anyhow::anyhow!("{e}"))?;
 
     let count = encrypt_value(&enc, &mut root)?;
 
@@ -55,8 +54,7 @@ fn encrypt_value(enc: &SecretEncryption, value: &mut Value) -> Result<u64> {
                 if is_secret_field(key) {
                     if let Value::String(s) = val {
                         if !s.is_empty() && !SecretEncryption::is_encrypted(s) {
-                            let encrypted = enc.encrypt(s)
-                                .map_err(|e| anyhow::anyhow!("{e}"))?;
+                            let encrypted = enc.encrypt(s).map_err(|e| anyhow::anyhow!("{e}"))?;
                             *s = encrypted;
                             count += 1;
                         }
@@ -90,8 +88,7 @@ async fn cmd_decrypt() -> Result<()> {
     let content = std::fs::read_to_string(&path)?;
     let mut root: Value = serde_json::from_str(&content)?;
 
-    let enc = resolve_master_key(true)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let enc = resolve_master_key(true).map_err(|e| anyhow::anyhow!("{e}"))?;
 
     let count = decrypt_value(&enc, &mut root)?;
 
@@ -111,8 +108,7 @@ fn decrypt_value(enc: &SecretEncryption, value: &mut Value) -> Result<u64> {
             for (_key, val) in map.iter_mut() {
                 if let Value::String(s) = val {
                     if SecretEncryption::is_encrypted(s) {
-                        let decrypted = enc.decrypt(s)
-                            .map_err(|e| anyhow::anyhow!("{e}"))?;
+                        let decrypted = enc.decrypt(s).map_err(|e| anyhow::anyhow!("{e}"))?;
                         *s = decrypted;
                         count += 1;
                     }
@@ -147,8 +143,7 @@ async fn cmd_rotate() -> Result<()> {
 
     // Step 1: Decrypt with current key
     println!("Step 1/2: Decrypt with current key");
-    let old_enc = resolve_master_key(true)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let old_enc = resolve_master_key(true).map_err(|e| anyhow::anyhow!("{e}"))?;
     let dec_count = decrypt_value(&old_enc, &mut root)?;
     println!("  Decrypted {dec_count} secret(s)");
 
@@ -165,8 +160,8 @@ async fn cmd_rotate() -> Result<()> {
         anyhow::bail!("passphrases do not match");
     }
 
-    let new_enc = SecretEncryption::from_passphrase(&new_passphrase)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let new_enc =
+        SecretEncryption::from_passphrase(&new_passphrase).map_err(|e| anyhow::anyhow!("{e}"))?;
     let enc_count = encrypt_value(&new_enc, &mut root)?;
 
     let pretty = serde_json::to_string_pretty(&root)?;
@@ -204,9 +199,7 @@ mod tests {
         let count = encrypt_value(&enc, &mut val).unwrap();
         assert_eq!(count, 1);
 
-        let encrypted = val["providers"]["anthropic"]["api_key"]
-            .as_str()
-            .unwrap();
+        let encrypted = val["providers"]["anthropic"]["api_key"].as_str().unwrap();
         assert!(SecretEncryption::is_encrypted(encrypted));
     }
 
@@ -393,10 +386,7 @@ mod tests {
 
         let count = decrypt_value(&enc, &mut val).unwrap();
         assert_eq!(count, 1);
-        assert_eq!(
-            val["list"][0]["api_key"].as_str().unwrap(),
-            "array-secret"
-        );
+        assert_eq!(val["list"][0]["api_key"].as_str().unwrap(), "array-secret");
     }
 
     #[test]

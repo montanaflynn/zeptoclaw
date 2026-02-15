@@ -23,10 +23,10 @@ pub use agent::{CompactionStrategy, ContextMonitor};
 pub use config::CompactionConfig;
 pub use safety::{SafetyConfig, SafetyLayer, SafetyResult};
 pub mod security;
-pub mod tunnel;
 pub mod session;
 pub mod skills;
 pub mod tools;
+pub mod tunnel;
 pub mod utils;
 
 pub use agent::{AgentLoop, ContextBuilder};

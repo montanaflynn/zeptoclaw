@@ -891,10 +891,12 @@ mod tests {
             "author": { "id": "allowed-user", "bot": false }
         });
 
-        let allowed = DiscordChannel::parse_message_create(&data, &["allowed-user".to_string()], false);
+        let allowed =
+            DiscordChannel::parse_message_create(&data, &["allowed-user".to_string()], false);
         assert!(allowed.is_some());
 
-        let denied = DiscordChannel::parse_message_create(&data, &["someone-else".to_string()], false);
+        let denied =
+            DiscordChannel::parse_message_create(&data, &["someone-else".to_string()], false);
         assert!(denied.is_none());
     }
 

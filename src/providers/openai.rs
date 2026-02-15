@@ -1281,8 +1281,7 @@ mod tests {
 
     #[test]
     fn test_provider_config_ollama_example() {
-        let json =
-            r#"{"providers": {"ollama": {"api_base": "http://localhost:11434/v1"}}}"#;
+        let json = r#"{"providers": {"ollama": {"api_base": "http://localhost:11434/v1"}}}"#;
         let config: crate::config::Config = serde_json::from_str(json).unwrap();
         let ollama = config.providers.ollama.unwrap();
         assert_eq!(ollama.api_base.unwrap(), "http://localhost:11434/v1");
@@ -1295,16 +1294,12 @@ mod tests {
         let config: crate::config::Config = serde_json::from_str(json).unwrap();
         let groq = config.providers.groq.unwrap();
         assert_eq!(groq.api_key.unwrap(), "gsk_test");
-        assert_eq!(
-            groq.api_base.unwrap(),
-            "https://api.groq.com/openai/v1"
-        );
+        assert_eq!(groq.api_base.unwrap(), "https://api.groq.com/openai/v1");
     }
 
     #[test]
     fn test_provider_config_vllm_example() {
-        let json =
-            r#"{"providers": {"vllm": {"api_base": "http://gpu-server:8000/v1"}}}"#;
+        let json = r#"{"providers": {"vllm": {"api_base": "http://gpu-server:8000/v1"}}}"#;
         let config: crate::config::Config = serde_json::from_str(json).unwrap();
         let vllm = config.providers.vllm.unwrap();
         assert_eq!(vllm.api_base.unwrap(), "http://gpu-server:8000/v1");
@@ -1313,39 +1308,30 @@ mod tests {
 
     #[test]
     fn test_with_base_url_together_example() {
-        let provider =
-            OpenAIProvider::with_base_url("tog_test", "https://api.together.xyz/v1");
+        let provider = OpenAIProvider::with_base_url("tog_test", "https://api.together.xyz/v1");
         assert_eq!(provider.api_base, "https://api.together.xyz/v1");
     }
 
     #[test]
     fn test_with_base_url_fireworks_example() {
-        let provider = OpenAIProvider::with_base_url(
-            "fw_test",
-            "https://api.fireworks.ai/inference/v1",
-        );
-        assert_eq!(
-            provider.api_base,
-            "https://api.fireworks.ai/inference/v1"
-        );
+        let provider =
+            OpenAIProvider::with_base_url("fw_test", "https://api.fireworks.ai/inference/v1");
+        assert_eq!(provider.api_base, "https://api.fireworks.ai/inference/v1");
     }
 
     #[test]
     fn test_with_base_url_lm_studio_example() {
-        let provider =
-            OpenAIProvider::with_base_url("key", "http://localhost:1234/v1");
+        let provider = OpenAIProvider::with_base_url("key", "http://localhost:1234/v1");
         assert_eq!(provider.api_base, "http://localhost:1234/v1");
     }
 
     #[test]
     fn test_chat_completions_url_uses_api_base() {
-        let provider =
-            OpenAIProvider::with_base_url("key", "http://localhost:11434/v1");
+        let provider = OpenAIProvider::with_base_url("key", "http://localhost:11434/v1");
         let url = format!("{}/chat/completions", provider.api_base);
         assert_eq!(url, "http://localhost:11434/v1/chat/completions");
 
-        let provider2 =
-            OpenAIProvider::with_base_url("key", "https://api.groq.com/openai/v1");
+        let provider2 = OpenAIProvider::with_base_url("key", "https://api.groq.com/openai/v1");
         let url2 = format!("{}/chat/completions", provider2.api_base);
         assert_eq!(url2, "https://api.groq.com/openai/v1/chat/completions");
     }

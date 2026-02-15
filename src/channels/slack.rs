@@ -188,8 +188,7 @@ impl SlackChannel {
             .envelope_id
             .as_deref()
             .map(|envelope_id| json!({ "envelope_id": envelope_id }).to_string());
-        let inbound_message =
-            Self::extract_inbound_message(&envelope, allowlist, deny_by_default);
+        let inbound_message = Self::extract_inbound_message(&envelope, allowlist, deny_by_default);
 
         Ok(ParsedSocketMessage {
             ack_message,
@@ -655,7 +654,8 @@ mod tests {
             }
         }"#;
 
-        let parsed = SlackChannel::parse_socket_message(raw, &[], false).expect("parse should succeed");
+        let parsed =
+            SlackChannel::parse_socket_message(raw, &[], false).expect("parse should succeed");
         assert_eq!(
             parsed.ack_message,
             Some(r#"{"envelope_id":"envelope-123"}"#.to_string())
@@ -683,7 +683,8 @@ mod tests {
             "payload":{"event":{"type":"reaction_added","user":"U123"}}
         }"#;
 
-        let parsed = SlackChannel::parse_socket_message(raw, &[], false).expect("parse should succeed");
+        let parsed =
+            SlackChannel::parse_socket_message(raw, &[], false).expect("parse should succeed");
         assert!(parsed.ack_message.is_some());
         assert!(parsed.inbound_message.is_none());
     }
@@ -717,10 +718,10 @@ mod tests {
             "payload":{"event":{"type":"message","subtype":"message_changed","channel":"C1","text":"edit"}}
         }"#;
 
-        let bot_parsed =
-            SlackChannel::parse_socket_message(bot_message, &[], false).expect("parse should succeed");
-        let subtype_parsed =
-            SlackChannel::parse_socket_message(subtype_message, &[], false).expect("parse should succeed");
+        let bot_parsed = SlackChannel::parse_socket_message(bot_message, &[], false)
+            .expect("parse should succeed");
+        let subtype_parsed = SlackChannel::parse_socket_message(subtype_message, &[], false)
+            .expect("parse should succeed");
 
         assert!(bot_parsed.inbound_message.is_none());
         assert!(subtype_parsed.inbound_message.is_none());

@@ -13,11 +13,11 @@ pub mod history;
 pub mod memory;
 pub mod migrate;
 pub mod onboard;
+pub mod secrets;
 pub mod skills;
 pub mod status;
 pub mod template;
 pub mod tools;
-pub mod secrets;
 pub mod watch;
 
 use anyhow::Result;
@@ -363,7 +363,10 @@ pub async fn run() -> Result<()> {
         }) => {
             batch::cmd_batch(input, output, format, stop_on_error, stream, template).await?;
         }
-        Some(Commands::Gateway { containerized, tunnel }) => {
+        Some(Commands::Gateway {
+            containerized,
+            tunnel,
+        }) => {
             gateway::cmd_gateway(containerized, tunnel).await?;
         }
         Some(Commands::AgentStdin) => {

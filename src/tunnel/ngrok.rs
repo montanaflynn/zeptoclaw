@@ -35,10 +35,7 @@ impl NgrokTunnel {
 /// Polls `http://127.0.0.1:4040/api/tunnels` and extracts the first
 /// tunnel's `public_url` field.
 async fn fetch_ngrok_url(client: &reqwest::Client) -> Result<Option<String>> {
-    let resp = client
-        .get("http://127.0.0.1:4040/api/tunnels")
-        .send()
-        .await;
+    let resp = client.get("http://127.0.0.1:4040/api/tunnels").send().await;
 
     match resp {
         Ok(r) if r.status().is_success() => {
@@ -99,10 +96,7 @@ impl TunnelProvider for NgrokTunnel {
         info!("Starting ngrok http tunnel on port {}", local_port);
 
         let child = cmd.spawn().map_err(|e| {
-            ZeptoError::Config(format!(
-                "Failed to start ngrok (is it installed?): {}",
-                e
-            ))
+            ZeptoError::Config(format!("Failed to start ngrok (is it installed?): {}", e))
         })?;
 
         self.child = Some(child);
@@ -119,11 +113,7 @@ impl TunnelProvider for NgrokTunnel {
             }
         })
         .await
-        .map_err(|_| {
-            ZeptoError::Config(
-                "Timed out waiting for ngrok tunnel URL (15s)".into(),
-            )
-        })??;
+        .map_err(|_| ZeptoError::Config("Timed out waiting for ngrok tunnel URL (15s)".into()))??;
 
         info!("ngrok tunnel active: {}", url);
         self.url = Some(url.clone());

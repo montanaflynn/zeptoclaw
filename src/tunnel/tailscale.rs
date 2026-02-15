@@ -50,9 +50,8 @@ async fn get_tailscale_hostname() -> Result<String> {
         )));
     }
 
-    let json: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|e| {
-        ZeptoError::Config(format!("Failed to parse tailscale status JSON: {}", e))
-    })?;
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| ZeptoError::Config(format!("Failed to parse tailscale status JSON: {}", e)))?;
 
     // Try Self.DNSName first, then Self.TailscaleIPs
     if let Some(self_node) = json.get("Self") {
@@ -89,10 +88,7 @@ impl TunnelProvider for TailscaleTunnel {
             "serve"
         };
 
-        info!(
-            "Starting tailscale {} on port {}",
-            subcommand, local_port
-        );
+        info!("Starting tailscale {} on port {}", subcommand, local_port);
 
         let mut cmd = Command::new("tailscale");
         cmd.arg(subcommand).arg(local_port.to_string());

@@ -39,8 +39,7 @@ pub fn extract_cloudflare_url(line: &str) -> Option<String> {
     for word in line.split_whitespace() {
         let candidate = word.trim_matches(|c: char| c == '"' || c == '\'' || c == ',');
         if candidate.starts_with("https://")
-            && (candidate.contains(".trycloudflare.com")
-                || candidate.contains(".cfargotunnel.com"))
+            && (candidate.contains(".trycloudflare.com") || candidate.contains(".cfargotunnel.com"))
         {
             return Some(candidate.to_string());
         }
@@ -84,20 +83,14 @@ impl TunnelProvider for CloudflareTunnel {
                 cmd.arg("tunnel")
                     .arg("--url")
                     .arg(format!("http://localhost:{}", local_port));
-                info!(
-                    "Starting cloudflared quick tunnel on port {}",
-                    local_port
-                );
+                info!("Starting cloudflared quick tunnel on port {}", local_port);
             }
         } else {
             // No config, use quick tunnel
             cmd.arg("tunnel")
                 .arg("--url")
                 .arg(format!("http://localhost:{}", local_port));
-            info!(
-                "Starting cloudflared quick tunnel on port {}",
-                local_port
-            );
+            info!("Starting cloudflared quick tunnel on port {}", local_port);
         }
 
         cmd.stdout(std::process::Stdio::piped());
@@ -113,9 +106,10 @@ impl TunnelProvider for CloudflareTunnel {
         })?;
 
         // cloudflared outputs the URL on stderr
-        let stderr = child.stderr.take().ok_or_else(|| {
-            ZeptoError::Config("Failed to capture cloudflared stderr".into())
-        })?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| ZeptoError::Config("Failed to capture cloudflared stderr".into()))?;
 
         let reader = BufReader::new(stderr);
         let mut lines = reader.lines();
@@ -133,9 +127,7 @@ impl TunnelProvider for CloudflareTunnel {
         })
         .await
         .map_err(|_| {
-            ZeptoError::Config(
-                "Timed out waiting for cloudflared tunnel URL (30s)".into(),
-            )
+            ZeptoError::Config("Timed out waiting for cloudflared tunnel URL (30s)".into())
         })??;
 
         info!("Cloudflare tunnel active: {}", url);

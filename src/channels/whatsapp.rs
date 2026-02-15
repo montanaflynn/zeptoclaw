@@ -694,7 +694,8 @@ mod tests {
             data: None,
         };
 
-        let result = WhatsAppChannel::parse_bridge_message(&msg, &["60123456789".to_string()], false);
+        let result =
+            WhatsAppChannel::parse_bridge_message(&msg, &["60123456789".to_string()], false);
         assert!(result.is_some());
     }
 
@@ -712,7 +713,8 @@ mod tests {
             data: None,
         };
 
-        let result = WhatsAppChannel::parse_bridge_message(&msg, &["60999999999".to_string()], false);
+        let result =
+            WhatsAppChannel::parse_bridge_message(&msg, &["60999999999".to_string()], false);
         assert!(result.is_none());
     }
 
