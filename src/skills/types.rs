@@ -38,6 +38,8 @@ pub struct SkillMetadata {
     pub name: String,
     /// Skill description.
     pub description: String,
+    /// Optional version (semver).
+    pub version: Option<String>,
     /// Optional homepage URL.
     pub homepage: Option<String>,
     /// ZeptoClaw metadata payload.

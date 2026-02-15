@@ -185,6 +185,13 @@ impl SkillsLoader {
             metadata.description.clone()
         };
 
+        // Replace {baseDir} with the skill's parent directory (OpenClaw compat).
+        let base_dir = path
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let body = body.replace("{baseDir}", &base_dir);
+
         Some(Skill {
             name,
             description,
@@ -216,10 +223,14 @@ impl SkillsLoader {
             .metadata
             .as_ref()
             .and_then(|value| {
-                // Priority: zeptoclaw > openclaw > raw object
+                // Priority: zeptoclaw > clawdbot > openclaw > clawdis > raw object
                 if let Some(scoped) = value.get("zeptoclaw") {
                     serde_json::from_value(scoped.clone()).ok()
+                } else if let Some(scoped) = value.get("clawdbot") {
+                    serde_json::from_value(scoped.clone()).ok()
                 } else if let Some(scoped) = value.get("openclaw") {
+                    serde_json::from_value(scoped.clone()).ok()
+                } else if let Some(scoped) = value.get("clawdis") {
                     serde_json::from_value(scoped.clone()).ok()
                 } else {
                     serde_json::from_value(value.clone()).ok()
@@ -294,6 +305,12 @@ fn parse_frontmatter_metadata(frontmatter: &str) -> SkillMetadata {
             match key {
                 "name" => metadata.name = unquote(value),
                 "description" => metadata.description = unquote(value),
+                "version" => {
+                    let parsed = unquote(value);
+                    if !parsed.is_empty() {
+                        metadata.version = Some(parsed);
+                    }
+                }
                 "homepage" => {
                     let parsed = unquote(value);
                     if !parsed.is_empty() {
@@ -585,6 +602,127 @@ Use wttr.in.
         let loader = SkillsLoader::new(ws, Some(temp.path().join("empty")));
         let always = loader.get_always_skills();
         assert!(always.contains(&"auto".to_string()));
+    }
+
+    #[test]
+    fn test_clawdbot_namespace_loads() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = temp.path().join("skills");
+        std::fs::create_dir_all(ws.join("venice")).unwrap();
+        std::fs::write(
+            ws.join("venice/SKILL.md"),
+            "---\nname: venice\ndescription: Venice AI\nversion: 1.2.0\nmetadata: {\"clawdbot\":{\"emoji\":\"🎨\",\"requires\":{\"bins\":[\"python3\"]}}}\n---\n# Venice\nGenerate images.",
+        )
+        .unwrap();
+
+        let loader = SkillsLoader::new(ws, Some(temp.path().join("empty")));
+        let skill = loader.load_skill("venice").unwrap();
+        let meta = loader.get_zeptometa(&skill);
+        assert_eq!(meta.emoji, Some("🎨".to_string()));
+        assert_eq!(meta.requires.bins, vec!["python3"]);
+        assert_eq!(skill.metadata.version, Some("1.2.0".to_string()));
+    }
+
+    #[test]
+    fn test_clawdis_namespace_loads() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = temp.path().join("skills");
+        std::fs::create_dir_all(ws.join("legacy")).unwrap();
+        std::fs::write(
+            ws.join("legacy/SKILL.md"),
+            "---\nname: legacy\ndescription: Legacy skill\nmetadata: {\"clawdis\":{\"emoji\":\"📦\",\"always\":true}}\n---\nBody.",
+        )
+        .unwrap();
+
+        let loader = SkillsLoader::new(ws, Some(temp.path().join("empty")));
+        let skill = loader.load_skill("legacy").unwrap();
+        let meta = loader.get_zeptometa(&skill);
+        assert_eq!(meta.emoji, Some("📦".to_string()));
+        assert!(meta.always);
+    }
+
+    #[test]
+    fn test_zeptoclaw_priority_over_clawdbot() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = temp.path().join("skills");
+        std::fs::create_dir_all(ws.join("prio")).unwrap();
+        std::fs::write(
+            ws.join("prio/SKILL.md"),
+            "---\nname: prio\ndescription: Priority test\nmetadata: {\"zeptoclaw\":{\"emoji\":\"🦀\"},\"clawdbot\":{\"emoji\":\"🤖\"}}\n---\nBody.",
+        )
+        .unwrap();
+
+        let loader = SkillsLoader::new(ws, Some(temp.path().join("empty")));
+        let skill = loader.load_skill("prio").unwrap();
+        let meta = loader.get_zeptometa(&skill);
+        assert_eq!(meta.emoji, Some("🦀".to_string()));
+    }
+
+    #[test]
+    fn test_clawdbot_priority_over_openclaw() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = temp.path().join("skills");
+        std::fs::create_dir_all(ws.join("nsorder")).unwrap();
+        std::fs::write(
+            ws.join("nsorder/SKILL.md"),
+            "---\nname: nsorder\ndescription: Namespace order\nmetadata: {\"clawdbot\":{\"emoji\":\"🤖\"},\"openclaw\":{\"emoji\":\"🔓\"}}\n---\nBody.",
+        )
+        .unwrap();
+
+        let loader = SkillsLoader::new(ws, Some(temp.path().join("empty")));
+        let skill = loader.load_skill("nsorder").unwrap();
+        let meta = loader.get_zeptometa(&skill);
+        assert_eq!(meta.emoji, Some("🤖".to_string()));
+    }
+
+    #[test]
+    fn test_basedir_replacement() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = temp.path().join("skills");
+        let skill_dir = ws.join("scripted");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: scripted\ndescription: With scripts\n---\nRun `{baseDir}/scripts/run.sh` to execute.",
+        )
+        .unwrap();
+
+        let loader = SkillsLoader::new(ws, Some(temp.path().join("empty")));
+        let skill = loader.load_skill("scripted").unwrap();
+        assert!(skill.content.contains(&skill_dir.to_string_lossy().to_string()));
+        assert!(!skill.content.contains("{baseDir}"));
+    }
+
+    #[test]
+    fn test_version_field_parsed() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = temp.path().join("skills");
+        std::fs::create_dir_all(ws.join("versioned")).unwrap();
+        std::fs::write(
+            ws.join("versioned/SKILL.md"),
+            "---\nname: versioned\ndescription: Versioned skill\nversion: 2.1.0\n---\nBody.",
+        )
+        .unwrap();
+
+        let loader = SkillsLoader::new(ws, Some(temp.path().join("empty")));
+        let skill = loader.load_skill("versioned").unwrap();
+        assert_eq!(skill.metadata.version, Some("2.1.0".to_string()));
+    }
+
+    #[test]
+    fn test_version_field_optional() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = temp.path().join("skills");
+        std::fs::create_dir_all(ws.join("noversion")).unwrap();
+        std::fs::write(
+            ws.join("noversion/SKILL.md"),
+            "---\nname: noversion\ndescription: No version\n---\nBody.",
+        )
+        .unwrap();
+
+        let loader = SkillsLoader::new(ws, Some(temp.path().join("empty")));
+        let skill = loader.load_skill("noversion").unwrap();
+        assert_eq!(skill.metadata.version, None);
     }
 
     #[test]
