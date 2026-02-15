@@ -12,7 +12,7 @@
 //! - Nonce: 24-byte random, base64-encoded (required by XChaCha20)
 //! - Ciphertext: AEAD output (plaintext + 16-byte Poly1305 tag), base64-encoded
 
-use argon2::Argon2;
+use argon2::{Algorithm, Argon2, Params, Version};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use chacha20poly1305::aead::{Aead, KeyInit, OsRng};
@@ -171,9 +171,14 @@ impl SecretEncryption {
     // ========================================================================
 
     /// Derive a 32-byte key from a passphrase and salt using Argon2id.
+    ///
+    /// Parameters: m=64MB (65536 KiB), t=3 iterations, p=1 parallelism (OWASP recommended).
     fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32]> {
+        let params = Params::new(65536, 3, 1, Some(32))
+            .map_err(|e| ZeptoError::Config(format!("Argon2 params: {e}")))?;
+        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let mut key = [0u8; 32];
-        Argon2::default()
+        argon2
             .hash_password_into(passphrase.as_bytes(), salt, &mut key)
             .map_err(|e| ZeptoError::Config(format!("key derivation failed: {e}")))?;
         Ok(key)

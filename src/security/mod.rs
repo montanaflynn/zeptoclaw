@@ -8,7 +8,7 @@ pub mod mount;
 pub mod path;
 pub mod shell;
 
-pub use encryption::{is_secret_field, SecretEncryption};
+pub use encryption::{is_secret_field, resolve_master_key, SecretEncryption};
 pub use mount::{validate_extra_mounts, validate_mount_not_blocked, DEFAULT_BLOCKED_PATTERNS};
 pub use path::{validate_path_in_workspace, SafePath};
 pub use shell::ShellSecurityConfig;
