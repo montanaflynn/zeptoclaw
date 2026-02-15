@@ -178,6 +178,48 @@ fn builtin_assistant() -> AgentTemplate {
     }
 }
 
+/// Creates the built-in "task-manager" template.
+///
+/// A task/project management persona that uses reminders and long-term memory
+/// to capture, track, and manage tasks via chat.
+fn builtin_task_manager() -> AgentTemplate {
+    AgentTemplate {
+        name: "task-manager".to_string(),
+        description: "AI project manager that captures tasks, sets reminders, and tracks progress"
+            .to_string(),
+        system_prompt: concat!(
+            "You are an AI task and project manager. You help the user capture tasks from ",
+            "natural conversation, set reminders for deadlines, track completion, and provide ",
+            "daily summaries.\n\n",
+            "When the user mentions something to do, proactively offer to add it as a reminder. ",
+            "When asked about their list, show pending reminders grouped by category. When a ",
+            "task is completed, mark it done and congratulate briefly.\n\n",
+            "Use long-term memory to remember user preferences (preferred categories, working ",
+            "hours, recurring patterns). Use the reminder tool for all task tracking. Use the ",
+            "message tool to send proactive updates.\n\n",
+            "Keep responses concise and action-oriented. Use bullet points for lists. ",
+            "Always confirm actions taken (e.g., 'Added reminder: Call dentist at 2pm').",
+        )
+        .to_string(),
+        model: None,
+        max_tokens: None,
+        temperature: None,
+        allowed_tools: Some(vec![
+            "reminder".to_string(),
+            "longterm_memory".to_string(),
+            "message".to_string(),
+            "cron".to_string(),
+        ]),
+        blocked_tools: None,
+        max_tool_iterations: None,
+        tags: vec![
+            "productivity".to_string(),
+            "tasks".to_string(),
+            "personal-assistant".to_string(),
+        ],
+    }
+}
+
 /// Returns all built-in templates as a vector.
 fn builtin_templates() -> Vec<AgentTemplate> {
     vec![
@@ -185,6 +227,7 @@ fn builtin_templates() -> Vec<AgentTemplate> {
         builtin_researcher(),
         builtin_writer(),
         builtin_assistant(),
+        builtin_task_manager(),
     ]
 }
 
@@ -381,6 +424,30 @@ mod tests {
     }
 
     #[test]
+    fn test_builtin_task_manager_exists() {
+        let registry = TemplateRegistry::new();
+        let tpl = registry.get("task-manager");
+        assert!(tpl.is_some());
+        let tpl = tpl.unwrap();
+        assert_eq!(tpl.name, "task-manager");
+        let tools = tpl.allowed_tools.as_ref().unwrap();
+        assert!(tools.contains(&"reminder".to_string()));
+        assert!(tools.contains(&"longterm_memory".to_string()));
+        assert!(tools.contains(&"message".to_string()));
+        assert!(tools.contains(&"cron".to_string()));
+        assert!(tpl.tags.contains(&"productivity".to_string()));
+        assert!(tpl.tags.contains(&"personal-assistant".to_string()));
+    }
+
+    #[test]
+    fn test_task_manager_by_tag() {
+        let registry = TemplateRegistry::new();
+        let personal = registry.list_by_tag("personal-assistant");
+        assert_eq!(personal.len(), 1);
+        assert_eq!(personal[0].name, "task-manager");
+    }
+
+    #[test]
     fn test_lookup_returns_none_for_unknown() {
         let registry = TemplateRegistry::new();
         assert!(registry.get("nonexistent-template").is_none());
@@ -392,13 +459,14 @@ mod tests {
     fn test_list_all_templates() {
         let registry = TemplateRegistry::new();
         let all = registry.list();
-        assert_eq!(all.len(), 4);
+        assert_eq!(all.len(), 5);
 
         let names: Vec<&str> = all.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&"coder"));
         assert!(names.contains(&"researcher"));
         assert!(names.contains(&"writer"));
         assert!(names.contains(&"assistant"));
+        assert!(names.contains(&"task-manager"));
     }
 
     #[test]
@@ -439,7 +507,7 @@ mod tests {
         };
 
         registry.register(custom);
-        assert_eq!(registry.list().len(), 5);
+        assert_eq!(registry.list().len(), 6);
 
         let devops = registry.get("devops").unwrap();
         assert_eq!(devops.model, Some("gpt-5.1".to_string()));
@@ -481,18 +549,19 @@ mod tests {
         assert!(overridden.tags.contains(&"rust".to_string()));
 
         // Total count should remain the same
-        assert_eq!(registry.list().len(), 4);
+        assert_eq!(registry.list().len(), 5);
     }
 
     #[test]
     fn test_names_list() {
         let registry = TemplateRegistry::new();
         let names = registry.names();
-        assert_eq!(names.len(), 4);
+        assert_eq!(names.len(), 5);
         assert!(names.contains(&"coder"));
         assert!(names.contains(&"researcher"));
         assert!(names.contains(&"writer"));
         assert!(names.contains(&"assistant"));
+        assert!(names.contains(&"task-manager"));
     }
 
     #[test]
@@ -683,11 +752,11 @@ mod tests {
         fs::write(temp_dir.join("translator.json"), new_tpl).unwrap();
 
         let mut registry = TemplateRegistry::new();
-        assert_eq!(registry.list().len(), 4);
+        assert_eq!(registry.list().len(), 5);
 
         let count = registry.merge_from_dir(&temp_dir).unwrap();
         assert_eq!(count, 2);
-        assert_eq!(registry.list().len(), 5); // 4 built-in + 1 new (coder was overridden)
+        assert_eq!(registry.list().len(), 6); // 5 built-in + 1 new (coder was overridden)
 
         // Verify override took effect
         let coder = registry.get("coder").unwrap();
