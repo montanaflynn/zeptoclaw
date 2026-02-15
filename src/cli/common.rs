@@ -585,16 +585,12 @@ pub(crate) async fn validate_api_key(
 
     match provider {
         "anthropic" => {
+            // Use read-only /v1/models endpoint to validate key without consuming tokens.
+            let base = api_base.unwrap_or("https://api.anthropic.com");
             let resp = client
-                .post("https://api.anthropic.com/v1/messages")
+                .get(format!("{}/v1/models", base))
                 .header("x-api-key", api_key)
                 .header("anthropic-version", "2023-06-01")
-                .header("content-type", "application/json")
-                .json(&serde_json::json!({
-                    "model": "claude-sonnet-4-5-20250929",
-                    "max_tokens": 1,
-                    "messages": [{"role": "user", "content": "hi"}]
-                }))
                 .send()
                 .await?;
             if resp.status().is_success() {
@@ -624,13 +620,26 @@ pub(crate) async fn validate_api_key(
                 Err(anyhow::anyhow!(friendly_api_error("openai", status, &body)))
             }
         }
-        _ => Ok(()),
+        _ => {
+            warn!("API key validation not supported for provider '{}', skipping", provider);
+            Ok(())
+        }
     }
 }
 
 /// Map HTTP status to user-friendly error message with actionable guidance.
-pub(crate) fn friendly_api_error(provider: &str, status: u16, _body: &str) -> String {
-    match status {
+pub(crate) fn friendly_api_error(provider: &str, status: u16, body: &str) -> String {
+    // Try to extract a message from the provider's JSON error response.
+    let api_msg = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| {
+            v.get("error")
+                .and_then(|e| e.get("message").or_else(|| e.as_str().map(|_| e)))
+                .and_then(|m| m.as_str())
+                .map(|s| s.to_string())
+        });
+
+    let base = match status {
         401 => format!(
             "Invalid API key. Check your {} key and try again.\n  {}",
             provider,
@@ -657,6 +666,12 @@ pub(crate) fn friendly_api_error(provider: &str, status: u16, _body: &str) -> St
             "API returned HTTP {}. Check your API key and account status.",
             status
         ),
+    };
+
+    if let Some(msg) = api_msg {
+        format!("{}\n  Detail: {}", base, msg)
+    } else {
+        base
     }
 }
 

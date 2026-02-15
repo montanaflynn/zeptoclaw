@@ -140,9 +140,9 @@ enum Commands {
         /// Check interval (e.g., "1h", "30m", "15m")
         #[arg(long, default_value = "1h")]
         interval: String,
-        /// Channel to notify on changes (telegram, slack, discord)
+        /// Channel to notify on changes (telegram, slack, discord). Omit for stdout only.
         #[arg(long)]
-        notify: String,
+        notify: Option<String>,
     },
 }
 

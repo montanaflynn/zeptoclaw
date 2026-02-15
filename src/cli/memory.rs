@@ -148,7 +148,14 @@ fn truncate_value(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
     } else {
-        format!("{}...", &s[..max])
+        // Find a char boundary at or before `max` to avoid panicking on multi-byte UTF-8.
+        let boundary = s
+            .char_indices()
+            .take_while(|(i, _)| *i <= max)
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        format!("{}...", &s[..boundary])
     }
 }
 
@@ -173,5 +180,25 @@ mod tests {
     fn test_truncate_value_exact() {
         let s = "a".repeat(80);
         assert_eq!(truncate_value(&s, 80), s);
+    }
+
+    #[test]
+    fn test_truncate_value_multibyte_utf8() {
+        // Each emoji is 4 bytes. Truncating at byte 5 should land on a char boundary.
+        let s = "\u{1F600}\u{1F601}\u{1F602}"; // 3 emoji = 12 bytes
+        let result = truncate_value(s, 5);
+        assert!(result.ends_with("..."));
+        // Should include only the first emoji (4 bytes), not slice mid-char
+        assert!(result.starts_with("\u{1F600}"));
+    }
+
+    #[test]
+    fn test_truncate_value_cjk() {
+        // CJK chars are 3 bytes each
+        let s = "\u{4F60}\u{597D}\u{4E16}\u{754C}"; // 你好世界 = 12 bytes
+        let result = truncate_value(s, 7);
+        assert!(result.ends_with("..."));
+        // 7 bytes = 2 full CJK chars (6 bytes) + partial, so boundary at 6
+        assert_eq!(result, "\u{4F60}\u{597D}...");
     }
 }
