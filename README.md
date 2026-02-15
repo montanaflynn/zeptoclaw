@@ -109,6 +109,33 @@ zeptoclaw gateway
 zeptoclaw gateway --containerized
 ```
 
+## Migrate from OpenClaw
+
+Already running OpenClaw? ZeptoClaw can import your config and skills in one command.
+
+```bash
+# Auto-detect OpenClaw installation (~/.openclaw, ~/.clawdbot, ~/.moldbot)
+zeptoclaw migrate
+
+# Specify path manually
+zeptoclaw migrate --from /path/to/openclaw
+
+# Preview what would be migrated (no files written)
+zeptoclaw migrate --dry-run
+
+# Non-interactive (skip confirmation prompts)
+zeptoclaw migrate --yes
+```
+
+The migration command:
+- Converts provider API keys, model settings, and channel configs
+- Copies skills to `~/.zeptoclaw/skills/`
+- Backs up your existing ZeptoClaw config before overwriting
+- Validates the migrated config and reports any issues
+- Lists features that can't be automatically ported
+
+Supports JSON and JSON5 config files (comments, trailing commas, unquoted keys).
+
 ## Deploy
 
 <p align="center">
