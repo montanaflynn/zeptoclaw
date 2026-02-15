@@ -97,6 +97,16 @@ impl Config {
                 _ => {}
             }
         }
+        if let Ok(val) = std::env::var("ZEPTOCLAW_AGENTS_DEFAULTS_COMPACT_TOOLS") {
+            self.agents.defaults.compact_tools = val == "true" || val == "1";
+        }
+        if let Ok(val) = std::env::var("ZEPTOCLAW_AGENTS_DEFAULTS_TOOL_PROFILE") {
+            self.agents.defaults.tool_profile = if val.is_empty() {
+                None
+            } else {
+                Some(val)
+            };
+        }
 
         // Gateway
         if let Ok(val) = std::env::var("ZEPTOCLAW_GATEWAY_HOST") {
@@ -1160,5 +1170,14 @@ mod tests {
             config.agents.defaults.message_queue_mode,
             MessageQueueMode::Followup
         );
+    }
+
+    #[test]
+    fn test_env_override_compact_tools() {
+        std::env::set_var("ZEPTOCLAW_AGENTS_DEFAULTS_COMPACT_TOOLS", "true");
+        let mut config = Config::default();
+        config.apply_env_overrides();
+        assert!(config.agents.defaults.compact_tools);
+        std::env::remove_var("ZEPTOCLAW_AGENTS_DEFAULTS_COMPACT_TOOLS");
     }
 }

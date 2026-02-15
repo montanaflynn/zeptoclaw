@@ -41,6 +41,8 @@ const KNOWN_AGENTS_DEFAULTS: &[&str] = &[
     "message_queue_mode",
     "streaming",
     "token_budget",
+    "compact_tools",
+    "tool_profile",
 ];
 
 #[allow(dead_code)]
@@ -213,10 +215,57 @@ pub fn validate_config(raw: &Value) -> Vec<Diagnostic> {
     diagnostics
 }
 
+
+/// Validate custom tool definitions.
+pub fn validate_custom_tools(config: &crate::config::Config) -> Vec<String> {
+    let mut warnings = Vec::new();
+    let name_re = regex::Regex::new(r"^[a-zA-Z][a-zA-Z0-9_]*$").unwrap();
+
+    // Built-in tool names to check for conflicts
+    let builtin_names: HashSet<&str> = [
+        "echo", "read_file", "write_file", "list_dir", "edit_file",
+        "shell", "web_search", "web_fetch", "message", "memory_search",
+        "memory_get", "longterm_memory", "whatsapp_send", "google_sheets",
+        "cron", "spawn", "delegate", "r8r",
+    ]
+    .iter()
+    .copied()
+    .collect();
+
+    for (i, tool) in config.custom_tools.iter().enumerate() {
+        if !name_re.is_match(&tool.name) {
+            warnings.push(format!(
+                "custom_tools[{}]: name '{}' invalid — must start with a letter and contain only letters, digits, and underscores",
+                i, tool.name
+            ));
+        }
+        if builtin_names.contains(tool.name.as_str()) {
+            warnings.push(format!(
+                "custom_tools[{}]: name '{}' conflicts with built-in tool",
+                i, tool.name
+            ));
+        }
+        if tool.command.trim().is_empty() {
+            warnings.push(format!(
+                "custom_tools[{}]: command must not be empty",
+                i
+            ));
+        }
+        if tool.description.len() > 60 {
+            warnings.push(format!(
+                "custom_tools[{}]: description exceeds 60 chars ({}). Shorter descriptions save tokens.",
+                i,
+                tool.description.len()
+            ));
+        }
+    }
+    warnings
+}
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    use crate::config::{Config, CustomToolDef};
 
     #[test]
     fn test_levenshtein_identical() {
@@ -289,5 +338,96 @@ mod tests {
         assert!(diags.iter().any(|d| {
             d.level == DiagnosticLevel::Error && d.message.contains("must be a JSON object")
         }));
+    }
+
+    #[test]
+    fn test_validate_custom_tools_valid() {
+        let mut config = Config::default();
+        config.custom_tools = vec![CustomToolDef {
+            name: "cpu_temp".to_string(),
+            description: "Read CPU temp".to_string(),
+            command: "cat /sys/class/thermal/thermal_zone0/temp".to_string(),
+            parameters: None,
+            working_dir: None,
+            timeout_secs: None,
+            env: None,
+        }];
+        let warnings = validate_custom_tools(&config);
+        assert!(
+            warnings.is_empty(),
+            "Expected no warnings, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn test_validate_custom_tool_name_invalid() {
+        let mut config = Config::default();
+        config.custom_tools = vec![CustomToolDef {
+            name: "123bad".to_string(),
+            description: "Bad".to_string(),
+            command: "echo".to_string(),
+            parameters: None,
+            working_dir: None,
+            timeout_secs: None,
+            env: None,
+        }];
+        let warnings = validate_custom_tools(&config);
+        assert!(warnings.iter().any(|w| w.contains("invalid")));
+    }
+
+    #[test]
+    fn test_validate_custom_tool_name_builtin_conflict() {
+        let mut config = Config::default();
+        config.custom_tools = vec![CustomToolDef {
+            name: "shell".to_string(),
+            description: "Conflict".to_string(),
+            command: "echo".to_string(),
+            parameters: None,
+            working_dir: None,
+            timeout_secs: None,
+            env: None,
+        }];
+        let warnings = validate_custom_tools(&config);
+        assert!(warnings.iter().any(|w| w.contains("conflicts")));
+    }
+
+    #[test]
+    fn test_validate_custom_tool_empty_command() {
+        let mut config = Config::default();
+        config.custom_tools = vec![CustomToolDef {
+            name: "test_tool".to_string(),
+            description: "Test".to_string(),
+            command: "  ".to_string(),
+            parameters: None,
+            working_dir: None,
+            timeout_secs: None,
+            env: None,
+        }];
+        let warnings = validate_custom_tools(&config);
+        assert!(warnings.iter().any(|w| w.contains("empty")));
+    }
+
+    #[test]
+    fn test_validate_custom_tool_long_description() {
+        let mut config = Config::default();
+        config.custom_tools = vec![CustomToolDef {
+            name: "verbose_tool".to_string(),
+            description: "A".repeat(61),
+            command: "echo hi".to_string(),
+            parameters: None,
+            working_dir: None,
+            timeout_secs: None,
+            env: None,
+        }];
+        let warnings = validate_custom_tools(&config);
+        assert!(warnings.iter().any(|w| w.contains("60 chars")));
+    }
+
+    #[test]
+    fn test_validate_compact_tools_known() {
+        let json = json!({"agents": {"defaults": {"compact_tools": true}}});
+        let diags = validate_config(&json);
+        assert!(!diags.iter().any(|d| d.message.contains("compact_tools")));
     }
 }
