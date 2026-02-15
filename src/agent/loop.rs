@@ -25,6 +25,16 @@ use crate::utils::metrics::MetricsCollector;
 use super::budget::TokenBudget;
 use super::context::ContextBuilder;
 
+/// System prompt sent during the memory flush turn, instructing the LLM to
+/// persist important facts and deduplicate existing long-term memory entries.
+const MEMORY_FLUSH_PROMPT: &str = "Review the conversation above. Save any important facts, decisions, \
+user preferences, or learnings to long-term memory using the longterm_memory tool. \
+Also review existing memories for duplicates — merge or delete stale entries. \
+Be selective: only save what would be useful in future conversations.";
+
+/// Maximum wall-clock time (in seconds) allowed for the memory flush LLM turn.
+const MEMORY_FLUSH_TIMEOUT_SECS: u64 = 10;
+
 /// Tool execution feedback event for CLI display.
 #[derive(Debug, Clone)]
 pub struct ToolFeedback {
@@ -354,6 +364,9 @@ impl AgentLoop {
         // Apply three-tier context overflow recovery if needed
         if let Some(ref monitor) = self.context_monitor {
             if monitor.needs_compaction(&session.messages) {
+                // Flush important memories before compaction discards context
+                self.memory_flush(&session.messages).await;
+
                 let context_limit = self.config.compaction.context_limit;
                 let (recovered, tier) = crate::agent::compaction::try_recover_context(
                     session.messages,
@@ -671,6 +684,9 @@ impl AgentLoop {
         // Apply three-tier context overflow recovery if needed (streaming)
         if let Some(ref monitor) = self.context_monitor {
             if monitor.needs_compaction(&session.messages) {
+                // Flush important memories before compaction discards context
+                self.memory_flush(&session.messages).await;
+
                 let context_limit = self.config.compaction.context_limit;
                 let (recovered, tier) = crate::agent::compaction::try_recover_context(
                     session.messages,
@@ -958,6 +974,112 @@ impl AgentLoop {
                 .await;
             Ok(rx)
         }
+    }
+
+    /// Run a silent LLM turn to flush important memories before context compaction.
+    ///
+    /// This method sends the current conversation plus a flush prompt to the LLM,
+    /// giving it the `longterm_memory` tool so it can persist any important facts,
+    /// decisions, or user preferences before the context is compacted. The call is
+    /// wrapped in a timeout and all failures are logged as warnings — the method
+    /// never panics or returns an error.
+    async fn memory_flush(&self, messages: &[crate::session::Message]) {
+        use tokio::time::{timeout, Duration};
+
+        // Get the provider, bail silently if none configured
+        let provider = {
+            let guard = self.provider.read().await;
+            match guard.as_ref() {
+                Some(p) => Arc::clone(p),
+                None => {
+                    tracing::warn!("memory_flush: no provider configured, skipping");
+                    return;
+                }
+            }
+        };
+
+        // Get longterm_memory tool definitions, bail if the tool is not registered
+        let tool_defs = {
+            let tools = self.tools.read().await;
+            let defs = tools.definitions_for_tools(&["longterm_memory"]);
+            if defs.is_empty() {
+                tracing::debug!("memory_flush: longterm_memory tool not registered, skipping");
+                return;
+            }
+            defs
+        };
+
+        // Build flush messages: conversation history + flush prompt
+        let mut flush_messages: Vec<crate::session::Message> =
+            vec![Message::system("You are a memory management assistant.")];
+        flush_messages.extend(messages.iter().cloned());
+        flush_messages.push(Message::user(MEMORY_FLUSH_PROMPT));
+
+        let options = ChatOptions::new()
+            .with_max_tokens(1024)
+            .with_temperature(0.0);
+        let model = Some(self.config.agents.defaults.model.as_str());
+
+        info!("memory_flush: running pre-compaction memory flush");
+
+        let flush_result = timeout(
+            Duration::from_secs(MEMORY_FLUSH_TIMEOUT_SECS),
+            provider.chat(flush_messages, tool_defs.clone(), model, options.clone()),
+        )
+        .await;
+
+        let response = match flush_result {
+            Ok(Ok(resp)) => resp,
+            Ok(Err(e)) => {
+                tracing::warn!(error = %e, "memory_flush: LLM call failed");
+                return;
+            }
+            Err(_) => {
+                tracing::warn!("memory_flush: timed out after {}s", MEMORY_FLUSH_TIMEOUT_SECS);
+                return;
+            }
+        };
+
+        // Execute any tool calls the LLM made (longterm_memory set/delete/etc.)
+        if response.has_tool_calls() {
+            let workspace = self.config.workspace_path();
+            let workspace_str = workspace.to_string_lossy();
+            let tool_ctx = ToolContext::new().with_workspace(&workspace_str);
+
+            for tc in &response.tool_calls {
+                let args: serde_json::Value = match serde_json::from_str(&tc.arguments) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::warn!(
+                            tool = %tc.name,
+                            error = %e,
+                            "memory_flush: invalid tool arguments"
+                        );
+                        continue;
+                    }
+                };
+
+                let result = {
+                    let tools = self.tools.read().await;
+                    tools.execute_with_context(&tc.name, args, &tool_ctx).await
+                };
+
+                match result {
+                    Ok(_) => {
+                        debug!(tool = %tc.name, "memory_flush: tool executed successfully");
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            tool = %tc.name,
+                            error = %e,
+                            "memory_flush: tool execution failed"
+                        );
+                    }
+                }
+            }
+        }
+
+        info!("memory_flush: completed");
     }
 
     /// Try to queue a message if the session is busy, or return false if lock is free.
@@ -1505,5 +1627,31 @@ mod tests {
         let agent = AgentLoop::new(config, session_manager, bus);
         let guard = agent.tool_feedback_tx.read().await;
         assert!(guard.is_none());
+    }
+
+    #[test]
+    fn test_memory_flush_prompt_is_valid() {
+        assert!(MEMORY_FLUSH_PROMPT.contains("long-term memory"));
+        assert!(MEMORY_FLUSH_PROMPT.contains("longterm_memory"));
+        assert!(MEMORY_FLUSH_PROMPT.contains("duplicates"));
+    }
+
+    #[test]
+    fn test_memory_flush_timeout_is_reasonable() {
+        assert!(MEMORY_FLUSH_TIMEOUT_SECS > 0);
+        assert!(MEMORY_FLUSH_TIMEOUT_SECS <= 30);
+    }
+
+    #[tokio::test]
+    async fn test_memory_flush_no_provider() {
+        // memory_flush should not panic when no provider is configured
+        let config = Config::default();
+        let session_manager = SessionManager::new_memory();
+        let bus = Arc::new(MessageBus::new());
+        let agent = AgentLoop::new(config, session_manager, bus);
+
+        let messages = vec![Message::user("hello"), Message::assistant("hi")];
+        // Should return silently without error
+        agent.memory_flush(&messages).await;
     }
 }

@@ -236,6 +236,43 @@ impl ToolRegistry {
             .collect()
     }
 
+    /// Get tool definitions for specific tool names only.
+    ///
+    /// Returns definitions only for tools whose names are in the provided list.
+    /// Tools not found in the registry are silently skipped.
+    ///
+    /// # Arguments
+    /// * `names` - Slice of tool names to include
+    ///
+    /// # Returns
+    /// A vector of tool definitions for the matching tools.
+    ///
+    /// # Example
+    /// ```
+    /// use zeptoclaw::tools::{ToolRegistry, EchoTool};
+    ///
+    /// let mut registry = ToolRegistry::new();
+    /// registry.register(Box::new(EchoTool));
+    ///
+    /// let defs = registry.definitions_for_tools(&["echo"]);
+    /// assert_eq!(defs.len(), 1);
+    /// assert_eq!(defs[0].name, "echo");
+    ///
+    /// let empty = registry.definitions_for_tools(&["nonexistent"]);
+    /// assert!(empty.is_empty());
+    /// ```
+    pub fn definitions_for_tools(&self, names: &[&str]) -> Vec<ToolDefinition> {
+        self.tools
+            .iter()
+            .filter(|(key, _)| names.contains(&key.as_str()))
+            .map(|(_, t)| ToolDefinition {
+                name: t.name().to_string(),
+                description: t.description().to_string(),
+                parameters: t.parameters(),
+            })
+            .collect()
+    }
+
     /// Get the names of all registered tools.
     ///
     /// # Returns
@@ -460,6 +497,26 @@ mod tests {
         // Should still have only one tool
         assert_eq!(registry.len(), 1);
         assert!(registry.has("echo"));
+    }
+
+    #[test]
+    fn test_definitions_for_tools() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Box::new(EchoTool));
+        let defs = registry.definitions_for_tools(&["echo"]);
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].name, "echo");
+
+        let empty = registry.definitions_for_tools(&["nonexistent"]);
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn test_definitions_for_tools_multiple() {
+        let mut registry = ToolRegistry::new();
+        registry.register(Box::new(EchoTool));
+        let defs = registry.definitions_for_tools(&["echo", "nonexistent"]);
+        assert_eq!(defs.len(), 1);
     }
 
     #[test]
