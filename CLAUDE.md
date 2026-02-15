@@ -57,6 +57,17 @@ cargo fmt
 ./target/release/zeptoclaw batch --input prompts.jsonl --output results.jsonl --format jsonl
 ./target/release/zeptoclaw batch --input prompts.txt --template coder --stop-on-error
 
+# Secret encryption
+./target/release/zeptoclaw secrets encrypt   # Encrypt plaintext secrets in config
+./target/release/zeptoclaw secrets decrypt   # Decrypt for editing
+./target/release/zeptoclaw secrets rotate    # Re-encrypt with new key
+
+# Gateway with tunnel
+./target/release/zeptoclaw gateway --tunnel cloudflare
+./target/release/zeptoclaw gateway --tunnel ngrok
+./target/release/zeptoclaw gateway --tunnel tailscale
+./target/release/zeptoclaw gateway --tunnel auto
+
 # Channel management
 ./target/release/zeptoclaw channel list
 ./target/release/zeptoclaw channel setup whatsapp
@@ -113,8 +124,10 @@ src/
 ├── runtime/        # Container runtimes (Native, Docker, Apple)
 ├── routines/       # Event/webhook/cron triggered automations
 ├── safety/         # Prompt injection detection, secret leak scanning, policy engine
-├── security/       # Shell blocklist, path validation, mount policy
+├── security/       # Shell blocklist, path validation, mount policy, secret encryption
+│   └── encryption.rs # XChaCha20-Poly1305 + Argon2id secret encryption at rest
 ├── session/        # Session, message persistence, conversation history
+├── tunnel/         # Tunnel providers (Cloudflare, ngrok, Tailscale)
 ├── skills/         # Markdown-based skill system (OpenClaw-compatible, loader, types)
 ├── plugins/        # Plugin system (JSON manifest, discovery, registry, binary mode)
 ├── tools/          # Agent tools (18 tools + MCP + binary plugins)
@@ -167,7 +180,7 @@ Containerized agent proxy for full request isolation:
 ### Providers (`src/providers/`)
 LLM provider abstraction via `LLMProvider` trait:
 - `ClaudeProvider` - Anthropic Claude API (120s timeout, SSE streaming)
-- `OpenAIProvider` - OpenAI Chat Completions API (120s timeout, SSE streaming)
+- `OpenAIProvider` - OpenAI Chat Completions API (120s timeout, SSE streaming); supports any OpenAI-compatible endpoint via `api_base` (Ollama, Groq, Together, Fireworks, LM Studio, vLLM)
 - `RetryProvider` - Decorator: exponential backoff on 429/5xx with structured `ProviderError` classification
 - `FallbackProvider` - Decorator: primary → secondary auto-failover with circuit breaker (Closed/Open/HalfOpen)
 - `ProviderError` enum: Auth, RateLimit, Billing, ServerError, InvalidRequest, ModelNotFound, Timeout — enables smart retry/fallback
@@ -183,6 +196,7 @@ Message input channels via `Channel` trait:
 - `WebhookChannel` - Generic HTTP POST inbound with optional Bearer auth
 - `WhatsAppChannel` - WhatsApp via whatsmeow-rs bridge (WebSocket JSON protocol)
 - CLI mode via direct agent invocation
+- All channels support `deny_by_default` config option for sender allowlists
 
 ### Deps (`src/deps/`)
 - `HasDependencies` trait — components declare external dependencies
@@ -192,7 +206,7 @@ Message input channels via `Channel` trait:
 - `DepFetcher` trait — abstracts network calls for testability
 
 ### Tools (`src/tools/`)
-16 built-in tools + dynamic MCP tools via `Tool` async trait. All filesystem tools require workspace.
+18 built-in tools + dynamic MCP tools via `Tool` async trait. All filesystem tools require workspace.
 
 ### Utils (`src/utils/`)
 - `sanitize.rs` - Tool result sanitization (strip base64, hex, truncate)
@@ -238,6 +252,14 @@ Message input channels via `Channel` trait:
 - `shell.rs` - Regex-based command blocklist
 - `path.rs` - Workspace path validation, symlink escape detection
 - `mount.rs` - Mount allowlist validation, docker binary verification
+- `encryption.rs` - `SecretEncryption`: XChaCha20-Poly1305 AEAD + Argon2id KDF, `ENC[...]` ciphertext format, `resolve_master_key()` for env/file/prompt sources, transparent config decrypt on load
+
+### Tunnel (`src/tunnel/`)
+- `TunnelProvider` trait with `start()` / `stop()` lifecycle
+- `CloudflareTunnel` - Cloudflare quick tunnels via `cloudflared`
+- `NgrokTunnel` - ngrok tunnels via `ngrok` CLI
+- `TailscaleTunnel` - Tailscale funnel via `tailscale`
+- Auto-detect mode: tries available providers in order
 
 ### MCP Client (`src/tools/mcp/`)
 - `protocol.rs` - JSON-RPC 2.0 types: McpRequest, McpResponse, McpTool, ContentBlock (Text/Image/Resource)
@@ -275,6 +297,8 @@ Environment variables override config:
 - `ZEPTOCLAW_ROUTINES_CRON_INTERVAL_SECS` — cron tick interval (default: 60)
 - `ZEPTOCLAW_ROUTINES_MAX_CONCURRENT` — max concurrent routine executions (default: 3)
 - `ZEPTOCLAW_HEARTBEAT_DELIVER_TO` — channel for heartbeat result delivery (default: none)
+- `ZEPTOCLAW_MASTER_KEY` — hex-encoded 32-byte master encryption key for secret encryption
+- `ZEPTOCLAW_TUNNEL_PROVIDER` — tunnel provider (cloudflare, ngrok, tailscale, auto)
 
 ### Compile-time Configuration
 

@@ -20,7 +20,10 @@ use super::common::create_agent;
 use super::heartbeat::heartbeat_file_path;
 
 /// Start multi-channel gateway.
-pub(crate) async fn cmd_gateway(containerized_flag: Option<String>) -> Result<()> {
+pub(crate) async fn cmd_gateway(
+    containerized_flag: Option<String>,
+    tunnel_flag: Option<String>,
+) -> Result<()> {
     println!("Starting ZeptoClaw Gateway...");
 
     // Load configuration
@@ -46,6 +49,25 @@ pub(crate) async fn cmd_gateway(containerized_flag: Option<String>) -> Result<()
                 }
             };
         }
+    }
+
+    // Start tunnel if requested
+    let mut _tunnel: Option<Box<dyn zeptoclaw::tunnel::TunnelProvider>> = None;
+    let tunnel_provider = tunnel_flag.or(config.tunnel.provider.clone());
+    if let Some(ref provider) = tunnel_provider {
+        let mut tunnel_config = config.tunnel.clone();
+        tunnel_config.provider = Some(provider.clone());
+        let mut t = zeptoclaw::tunnel::create_tunnel(&tunnel_config)
+            .with_context(|| format!("Failed to create {} tunnel", provider))?;
+
+        let gateway_port = config.gateway.port;
+        let tunnel_url = t
+            .start(gateway_port)
+            .await
+            .with_context(|| format!("Failed to start {} tunnel", provider))?;
+
+        println!("Tunnel active: {}", tunnel_url);
+        _tunnel = Some(t);
     }
 
     // Create message bus

@@ -90,6 +90,7 @@ impl SlackChannel {
         let base_config = BaseChannelConfig {
             name: "slack".to_string(),
             allowlist: config.allow_from.clone(),
+            deny_by_default: config.deny_by_default,
         };
 
         Self {
@@ -175,7 +176,11 @@ impl SlackChannel {
         })
     }
 
-    fn parse_socket_message(raw: &str, allowlist: &[String]) -> Result<ParsedSocketMessage> {
+    fn parse_socket_message(
+        raw: &str,
+        allowlist: &[String],
+        deny_by_default: bool,
+    ) -> Result<ParsedSocketMessage> {
         let envelope: SlackSocketEnvelope = serde_json::from_str(raw)
             .map_err(|e| ZeptoError::Channel(format!("Invalid Slack socket payload: {}", e)))?;
 
@@ -183,7 +188,7 @@ impl SlackChannel {
             .envelope_id
             .as_deref()
             .map(|envelope_id| json!({ "envelope_id": envelope_id }).to_string());
-        let inbound_message = Self::extract_inbound_message(&envelope, allowlist);
+        let inbound_message = Self::extract_inbound_message(&envelope, allowlist, deny_by_default);
 
         Ok(ParsedSocketMessage {
             ack_message,
@@ -194,6 +199,7 @@ impl SlackChannel {
     fn extract_inbound_message(
         envelope: &SlackSocketEnvelope,
         allowlist: &[String],
+        deny_by_default: bool,
     ) -> Option<InboundMessage> {
         if envelope.envelope_type != "events_api" {
             return None;
@@ -216,7 +222,12 @@ impl SlackChannel {
             return None;
         }
 
-        if !allowlist.is_empty() && !allowlist.contains(&sender_id) {
+        let allowed = if allowlist.is_empty() {
+            !deny_by_default
+        } else {
+            allowlist.contains(&sender_id)
+        };
+        if !allowed {
             info!(
                 "Slack: user {} not in allowlist, ignoring inbound message",
                 sender_id
@@ -251,6 +262,7 @@ impl SlackChannel {
         app_token: String,
         bus: Arc<MessageBus>,
         allowlist: Vec<String>,
+        deny_by_default: bool,
         mut shutdown_rx: mpsc::Receiver<()>,
     ) {
         loop {
@@ -306,7 +318,7 @@ impl SlackChannel {
 
                 match next {
                     Some(Ok(WsMessage::Text(raw))) => {
-                        match Self::parse_socket_message(&raw, &allowlist) {
+                        match Self::parse_socket_message(&raw, &allowlist, deny_by_default) {
                             Ok(parsed) => {
                                 if let Some(ack_message) = parsed.ack_message {
                                     if let Err(e) =
@@ -396,6 +408,7 @@ impl Channel for SlackChannel {
             app_token,
             Arc::clone(&self.bus),
             self.config.allow_from.clone(),
+            self.config.deny_by_default,
             shutdown_rx,
         ));
 
@@ -494,6 +507,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: "xapp-test-token".to_string(),
             allow_from: vec!["U123".to_string()],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
 
@@ -510,6 +524,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
 
@@ -523,6 +538,7 @@ mod tests {
             bot_token: "xoxb-my-token".to_string(),
             app_token: "xapp-token".to_string(),
             allow_from: vec!["UADMIN".to_string()],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
 
@@ -538,6 +554,7 @@ mod tests {
             bot_token: String::new(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let mut channel = SlackChannel::new(config, test_bus());
 
@@ -553,6 +570,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let mut channel = SlackChannel::new(config, test_bus());
 
@@ -568,6 +586,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let mut channel = SlackChannel::new(config, test_bus());
 
@@ -582,6 +601,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
 
@@ -597,6 +617,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
         channel.running.store(true, Ordering::SeqCst);
@@ -633,7 +654,8 @@ mod tests {
             }
         }"#;
 
-        let parsed = SlackChannel::parse_socket_message(raw, &[]).expect("parse should succeed");
+        let parsed =
+            SlackChannel::parse_socket_message(raw, &[], false).expect("parse should succeed");
         assert_eq!(
             parsed.ack_message,
             Some(r#"{"envelope_id":"envelope-123"}"#.to_string())
@@ -661,7 +683,8 @@ mod tests {
             "payload":{"event":{"type":"reaction_added","user":"U123"}}
         }"#;
 
-        let parsed = SlackChannel::parse_socket_message(raw, &[]).expect("parse should succeed");
+        let parsed =
+            SlackChannel::parse_socket_message(raw, &[], false).expect("parse should succeed");
         assert!(parsed.ack_message.is_some());
         assert!(parsed.inbound_message.is_none());
     }
@@ -676,7 +699,7 @@ mod tests {
             }
         }"#;
 
-        let parsed = SlackChannel::parse_socket_message(raw, &["U123".to_string()])
+        let parsed = SlackChannel::parse_socket_message(raw, &["U123".to_string()], false)
             .expect("parse should succeed");
         assert!(parsed.ack_message.is_some());
         assert!(parsed.inbound_message.is_none());
@@ -695,10 +718,10 @@ mod tests {
             "payload":{"event":{"type":"message","subtype":"message_changed","channel":"C1","text":"edit"}}
         }"#;
 
-        let bot_parsed =
-            SlackChannel::parse_socket_message(bot_message, &[]).expect("parse should succeed");
-        let subtype_parsed =
-            SlackChannel::parse_socket_message(subtype_message, &[]).expect("parse should succeed");
+        let bot_parsed = SlackChannel::parse_socket_message(bot_message, &[], false)
+            .expect("parse should succeed");
+        let subtype_parsed = SlackChannel::parse_socket_message(subtype_message, &[], false)
+            .expect("parse should succeed");
 
         assert!(bot_parsed.inbound_message.is_none());
         assert!(subtype_parsed.inbound_message.is_none());

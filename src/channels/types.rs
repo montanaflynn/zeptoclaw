@@ -114,6 +114,13 @@ pub trait Channel: Send + Sync {
 /// This struct provides common configuration options that most channels need,
 /// including the channel name and an allowlist for access control.
 ///
+/// # Access Control Modes
+///
+/// - **Open mode** (`deny_by_default: false`, the default): An empty allowlist
+///   means all senders are permitted.
+/// - **Strict mode** (`deny_by_default: true`): An empty allowlist means
+///   *no* senders are permitted — every sender must be explicitly listed.
+///
 /// # Example
 ///
 /// ```
@@ -122,6 +129,7 @@ pub trait Channel: Send + Sync {
 /// let config = BaseChannelConfig {
 ///     name: "telegram".to_string(),
 ///     allowlist: vec!["user123".to_string(), "user456".to_string()],
+///     ..Default::default()
 /// };
 ///
 /// assert!(config.is_allowed("user123"));
@@ -131,14 +139,17 @@ pub trait Channel: Send + Sync {
 pub struct BaseChannelConfig {
     /// The unique name of this channel
     pub name: String,
-    /// List of allowed user IDs. If empty, all users are allowed.
+    /// List of allowed user IDs. If empty, behaviour depends on `deny_by_default`.
     pub allowlist: Vec<String>,
+    /// When `true`, an empty allowlist rejects all senders (strict mode).
+    /// When `false` (the default), an empty allowlist allows all senders.
+    pub deny_by_default: bool,
 }
 
 impl BaseChannelConfig {
     /// Creates a new `BaseChannelConfig` with the given name and an empty allowlist.
     ///
-    /// An empty allowlist means all users are allowed.
+    /// An empty allowlist means all users are allowed (`deny_by_default` is `false`).
     ///
     /// # Arguments
     ///
@@ -156,6 +167,7 @@ impl BaseChannelConfig {
         Self {
             name: name.to_string(),
             allowlist: Vec::new(),
+            deny_by_default: false,
         }
     }
 
@@ -179,13 +191,18 @@ impl BaseChannelConfig {
         Self {
             name: name.to_string(),
             allowlist,
+            deny_by_default: false,
         }
     }
 
-    /// Checks if a user is allowed based on the allowlist.
+    /// Checks if a user is allowed based on the allowlist and `deny_by_default`.
     ///
-    /// If the allowlist is empty, all users are allowed.
-    /// Otherwise, only users in the allowlist are allowed.
+    /// | `deny_by_default` | Allowlist empty | Behaviour            |
+    /// |-------------------|-----------------|----------------------|
+    /// | `false` (default) | yes             | Allow all senders    |
+    /// | `false`           | no              | Check allowlist      |
+    /// | `true`            | yes             | **Reject all**       |
+    /// | `true`            | no              | Check allowlist      |
     ///
     /// # Arguments
     ///
@@ -200,16 +217,30 @@ impl BaseChannelConfig {
     /// let config = BaseChannelConfig {
     ///     name: "test".to_string(),
     ///     allowlist: vec!["user1".to_string()],
+    ///     ..Default::default()
     /// };
     /// assert!(config.is_allowed("user1"));
     /// assert!(!config.is_allowed("user2"));
     ///
-    /// // Empty allowlist = allow all
+    /// // Empty allowlist = allow all (default mode)
     /// let open_config = BaseChannelConfig::new("test");
     /// assert!(open_config.is_allowed("anyone"));
+    ///
+    /// // Strict mode: empty allowlist = reject all
+    /// let strict = BaseChannelConfig {
+    ///     name: "test".to_string(),
+    ///     deny_by_default: true,
+    ///     ..Default::default()
+    /// };
+    /// assert!(!strict.is_allowed("anyone"));
     /// ```
     pub fn is_allowed(&self, user_id: &str) -> bool {
-        self.allowlist.is_empty() || self.allowlist.contains(&user_id.to_string())
+        if self.allowlist.is_empty() {
+            // Empty allowlist: allow all unless deny_by_default is on
+            !self.deny_by_default
+        } else {
+            self.allowlist.contains(&user_id.to_string())
+        }
     }
 }
 
@@ -239,6 +270,7 @@ mod tests {
         let config = BaseChannelConfig {
             name: "test".to_string(),
             allowlist: vec!["user1".to_string()],
+            ..Default::default()
         };
         assert!(config.is_allowed("user1"));
         assert!(!config.is_allowed("user2"));
@@ -249,6 +281,7 @@ mod tests {
         let config = BaseChannelConfig {
             name: "test".to_string(),
             allowlist: vec![],
+            ..Default::default()
         };
         assert!(config.is_allowed("anyone")); // empty allowlist = allow all
     }
@@ -262,6 +295,7 @@ mod tests {
                 "user2".to_string(),
                 "user3".to_string(),
             ],
+            ..Default::default()
         };
         assert!(config.is_allowed("user1"));
         assert!(config.is_allowed("user2"));
@@ -274,6 +308,7 @@ mod tests {
         let config = BaseChannelConfig::default();
         assert!(config.name.is_empty());
         assert!(config.allowlist.is_empty());
+        assert!(!config.deny_by_default);
         assert!(config.is_allowed("anyone"));
     }
 
@@ -282,9 +317,50 @@ mod tests {
         let config = BaseChannelConfig {
             name: "test".to_string(),
             allowlist: vec!["user1".to_string()],
+            ..Default::default()
         };
         let cloned = config.clone();
         assert_eq!(cloned.name, "test");
         assert_eq!(cloned.allowlist, vec!["user1"]);
+    }
+
+    // ---- deny_by_default tests ----
+
+    #[test]
+    fn test_deny_by_default_empty_allowlist_rejects() {
+        let config = BaseChannelConfig {
+            name: "test".to_string(),
+            allowlist: vec![],
+            deny_by_default: true,
+        };
+        assert!(!config.is_allowed("anyone"));
+    }
+
+    #[test]
+    fn test_deny_by_default_with_allowlist_checks() {
+        let config = BaseChannelConfig {
+            name: "test".to_string(),
+            allowlist: vec!["user1".to_string()],
+            deny_by_default: true,
+        };
+        assert!(config.is_allowed("user1"));
+        assert!(!config.is_allowed("user2"));
+    }
+
+    #[test]
+    fn test_deny_by_default_false_allows_all() {
+        let config = BaseChannelConfig {
+            name: "test".to_string(),
+            allowlist: vec![],
+            deny_by_default: false,
+        };
+        assert!(config.is_allowed("anyone"));
+    }
+
+    #[test]
+    fn test_deny_by_default_defaults_to_false() {
+        let config = BaseChannelConfig::new("test");
+        assert!(!config.deny_by_default);
+        assert!(config.is_allowed("anyone"));
     }
 }

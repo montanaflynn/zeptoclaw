@@ -116,6 +116,7 @@ impl TelegramChannel {
         let base_config = BaseChannelConfig {
             name: "telegram".to_string(),
             allowlist: config.allow_from.clone(),
+            deny_by_default: config.deny_by_default,
         };
         Self {
             config,
@@ -208,6 +209,7 @@ impl Channel for TelegramChannel {
         let token = self.config.token.clone();
         let bus = self.bus.clone();
         let allowlist = self.config.allow_from.clone();
+        let deny_by_default = self.config.deny_by_default;
         // Share the same running flag with the spawned task so state stays in sync
         let running_clone = Arc::clone(&self.running);
 
@@ -285,15 +287,21 @@ impl Channel for TelegramChannel {
                         |_bot: Bot,
                          msg: Message,
                          bus: Arc<MessageBus>,
-                         allowlist: Vec<String>| async move {
+                         allowlist: Vec<String>,
+                         deny_by_default: bool| async move {
                             // Extract user ID
                             let user_id = msg
                                 .from()
                                 .map(|u| u.id.0.to_string())
                                 .unwrap_or_else(|| "unknown".to_string());
 
-                            // Check allowlist (empty = allow all)
-                            if !allowlist.is_empty() && !allowlist.contains(&user_id) {
+                            // Check allowlist with deny_by_default support
+                            let allowed = if allowlist.is_empty() {
+                                !deny_by_default
+                            } else {
+                                allowlist.contains(&user_id)
+                            };
+                            if !allowed {
                                 info!(
                                     "Telegram: User {} not in allowlist, ignoring message",
                                     user_id
@@ -332,7 +340,7 @@ impl Channel for TelegramChannel {
 
                 // Build the dispatcher with dependencies
                 let mut dispatcher = Dispatcher::builder(bot, handler)
-                    .dependencies(dptree::deps![bus, allowlist])
+                    .dependencies(dptree::deps![bus, allowlist, deny_by_default])
                     .build();
 
                 info!("Telegram bot dispatcher started, waiting for messages...");
@@ -453,6 +461,7 @@ mod tests {
             enabled: true,
             token: "test-token".to_string(),
             allow_from: vec!["user1".to_string()],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let channel = TelegramChannel::new(config, bus);
@@ -469,6 +478,7 @@ mod tests {
             enabled: true,
             token: "test-token".to_string(),
             allow_from: vec![],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let channel = TelegramChannel::new(config, bus);
@@ -485,6 +495,7 @@ mod tests {
             enabled: true,
             token: "my-bot-token".to_string(),
             allow_from: vec!["admin".to_string()],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let channel = TelegramChannel::new(config, bus);
@@ -500,6 +511,7 @@ mod tests {
             enabled: false,
             token: "test-token".to_string(),
             allow_from: vec![],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let channel = TelegramChannel::new(config, bus);
@@ -517,6 +529,7 @@ mod tests {
                 "user2".to_string(),
                 "admin".to_string(),
             ],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let channel = TelegramChannel::new(config, bus);
@@ -534,6 +547,7 @@ mod tests {
             enabled: true,
             token: String::new(), // Empty token
             allow_from: vec![],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let mut channel = TelegramChannel::new(config, bus);
@@ -550,6 +564,7 @@ mod tests {
             enabled: false, // Disabled
             token: "test-token".to_string(),
             allow_from: vec![],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let mut channel = TelegramChannel::new(config, bus);
@@ -566,6 +581,7 @@ mod tests {
             enabled: true,
             token: "test-token".to_string(),
             allow_from: vec![],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let mut channel = TelegramChannel::new(config, bus);
@@ -581,6 +597,7 @@ mod tests {
             enabled: true,
             token: "test-token".to_string(),
             allow_from: vec![],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let channel = TelegramChannel::new(config, bus);
@@ -597,6 +614,7 @@ mod tests {
             enabled: true,
             token: "test-token".to_string(),
             allow_from: vec!["allowed_user".to_string()],
+            ..Default::default()
         };
         let bus = Arc::new(MessageBus::new());
         let channel = TelegramChannel::new(config, bus);

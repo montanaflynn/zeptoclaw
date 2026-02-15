@@ -42,8 +42,8 @@ Five open-source projects solving the same problem — a self-hosted AI assistan
 | Tool approval gate | No | No | No | Autonomy levels (ReadOnly/Supervised/Full) | Yes (policy-based) |
 | Token budget tracking | No | No | No | No | Yes |
 | Cost tracking | No | No | No | No | Yes (8 models) |
-| Secret encryption at rest | No | No | No | Yes (ChaCha20-Poly1305) | No |
-| Tunnel support | Tailscale | No | No | Cloudflare, Tailscale, ngrok, custom | No |
+| Secret encryption at rest | No | No | No | Yes (ChaCha20-Poly1305) | Yes (XChaCha20-Poly1305 + Argon2id) |
+| Tunnel support | Tailscale | No | No | Cloudflare, Tailscale, ngrok, custom | Yes (Cloudflare, ngrok, Tailscale) |
 
 ## Channels
 
@@ -81,14 +81,14 @@ OpenClaw leads on channel breadth (14+32 extensions). PicoClaw covers Chinese pl
 | SSRF prevention | No | No | No | No | Yes (DNS pinning, private IP blocking) |
 | Container isolation (per-agent) | No | No | Yes (Apple/Docker) | No (planned) | Yes (Docker + Apple Container) |
 | Mount allowlist / blocklist | No | No | Yes (external allowlist) | Yes (sensitive dotfiles blocked) | Yes (mount policy) |
-| Secret encryption at rest | No | No | No | Yes (ChaCha20-Poly1305) | No |
+| Secret encryption at rest | No | No | No | Yes (ChaCha20-Poly1305) | Yes (XChaCha20-Poly1305 + Argon2id) |
 | Gateway pairing auth | No | No | No | Yes (6-digit code + Bearer token) | No |
-| Sender allowlists | No | No | No | Yes (deny-by-default per channel) | No |
+| Sender allowlists | No | No | No | Yes (deny-by-default per channel) | Yes (deny-by-default per channel) |
 | DM pairing / auth | Yes | No | No | No | No |
 | Audit trails | Yes | No | No | No | No |
 | Tool approval gate | No | No | No | Autonomy levels | Yes |
 
-ZeroClaw and ZeptoClaw take different security approaches. ZeroClaw focuses on access control — gateway pairing, sender allowlists, secret encryption, autonomy levels. ZeptoClaw focuses on content security — prompt injection detection, leak scanning, SSRF prevention, policy engine. Both block sensitive filesystem paths.
+ZeroClaw and ZeptoClaw take different security approaches. ZeroClaw focuses on access control — gateway pairing, sender allowlists, secret encryption, autonomy levels. ZeptoClaw focuses on content security — prompt injection detection, leak scanning, SSRF prevention, policy engine — and now also has secret encryption at rest (XChaCha20-Poly1305 + Argon2id) and deny-by-default sender allowlists. Both block sensitive filesystem paths.
 
 **Known vulnerabilities:** OpenClaw's ecosystem has seen CVE-2026-25253 (CVSS 8.8 — WebSocket hijacking to RCE), ClawHavoc (341 malicious skills), and 42,000 exposed instances. The other projects have no known CVEs as of this writing.
 
@@ -146,8 +146,8 @@ ZeroClaw has the strongest memory search after OpenClaw — hybrid SQLite FTS5 (
 | Smallest codebase to fork | **NanoClaw** | 3.4K lines, designed to be forked |
 | Most LLM providers | **ZeroClaw** | 22+ providers, any OpenAI-compatible endpoint |
 | Best memory search (no external deps) | **ZeroClaw** | Built-in hybrid FTS5 + vector embeddings |
-| Secrets encryption at rest | **ZeroClaw** | ChaCha20-Poly1305 AEAD for API keys |
-| Tunnel support (Cloudflare/ngrok) | **ZeroClaw** | 4 built-in tunnel options |
+| Secrets encryption at rest | **ZeroClaw** or **ZeptoClaw** | ZeroClaw: ChaCha20-Poly1305. ZeptoClaw: XChaCha20-Poly1305 + Argon2id |
+| Tunnel support (Cloudflare/ngrok) | **ZeroClaw** or **ZeptoClaw** | ZeroClaw: 4 options. ZeptoClaw: Cloudflare, ngrok, Tailscale |
 | Security-sensitive deployment | **ZeptoClaw** | Multi-layer safety, container isolation, leak detection |
 | Resource-constrained server | **ZeptoClaw** or **ZeroClaw** | Both Rust, both <5MB binary |
 | Multi-tenant hosting | **ZeptoClaw** | ~6MB per tenant, container isolation per request |
@@ -179,6 +179,6 @@ ZeroClaw has the strongest memory search after OpenClaw — hybrid SQLite FTS5 (
 
 **ZeroClaw** is the most provider-agnostic — 22+ LLM providers, built-in hybrid memory search (FTS5 + vector), secret encryption at rest, and 7 channels including iMessage and Matrix. The tradeoff is no container isolation (planned), no content security (injection/leak detection), and no multi-tenant support.
 
-**ZeptoClaw** is the most secure and operationally complete — multi-layer safety, per-command container isolation, token budgeting, cost tracking, batch mode, and agent swarms in a 4MB binary. The tradeoff is fewer channels (5 vs 14/10/7) and no companion apps.
+**ZeptoClaw** is the most secure and operationally complete — multi-layer safety, per-command container isolation, secret encryption at rest (XChaCha20-Poly1305 + Argon2id), sender allowlists, tunnel support (Cloudflare/ngrok/Tailscale), token budgeting, cost tracking, batch mode, and agent swarms in a 4MB binary. The tradeoff is fewer channels (5 vs 14/10/7) and no companion apps.
 
 All five are open source, self-hosted, and built for developers who want to own their AI assistant. The right choice depends on your priorities: features (OpenClaw), portability (PicoClaw), simplicity (NanoClaw), provider flexibility (ZeroClaw), or security and efficiency (ZeptoClaw).

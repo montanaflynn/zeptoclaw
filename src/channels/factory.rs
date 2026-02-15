@@ -81,6 +81,7 @@ pub async fn register_configured_channels(
             let base_config = BaseChannelConfig {
                 name: "webhook".to_string(),
                 allowlist: webhook_config.allow_from.clone(),
+                deny_by_default: webhook_config.deny_by_default,
             };
             manager
                 .register(Box::new(WebhookChannel::new(
@@ -166,6 +167,7 @@ mod tests {
             enabled: true,
             token: "test-token".to_string(),
             allow_from: Vec::new(),
+            ..Default::default()
         });
 
         let manager = ChannelManager::new(bus.clone(), config.clone());
@@ -184,6 +186,7 @@ mod tests {
             bridge_url: "ws://localhost:3001".to_string(),
             allow_from: Vec::new(),
             bridge_managed: true,
+            ..Default::default()
         });
 
         let manager = ChannelManager::new(bus.clone(), config.clone());
@@ -202,6 +205,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: Vec::new(),
+            ..Default::default()
         });
 
         let manager = ChannelManager::new(bus.clone(), config.clone());

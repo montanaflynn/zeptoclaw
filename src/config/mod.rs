@@ -11,6 +11,7 @@ pub use types::*;
 
 use crate::error::{Result, ZeptoError};
 use once_cell::sync::OnceCell;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
@@ -40,10 +41,24 @@ impl Config {
     }
 
     /// Load configuration from a specific path with environment overrides.
+    ///
+    /// If the config file contains `ENC[...]` encrypted values, they are
+    /// transparently decrypted before the JSON is deserialized into `Config`.
+    /// The master key is resolved via `ZEPTOCLAW_MASTER_KEY` env var or, when
+    /// running in an interactive terminal, an interactive passphrase prompt.
     pub fn load_from_path(path: &PathBuf) -> Result<Self> {
         let mut config = if path.exists() {
             let content = std::fs::read_to_string(path)?;
-            serde_json::from_str(&content)?
+            let mut raw: serde_json::Value = serde_json::from_str(&content)?;
+
+            // Decrypt ENC[...] values if present
+            if has_encrypted_values(&raw) {
+                let interactive = std::io::stdin().is_terminal();
+                let enc = crate::security::encryption::resolve_master_key(interactive)?;
+                decrypt_config_values(&mut raw, &enc)?;
+            }
+
+            serde_json::from_value(raw)?
         } else {
             Config::default()
         };
@@ -731,6 +746,44 @@ impl Config {
 
         None
     }
+}
+
+/// Check if any string value in the JSON tree starts with `ENC[`.
+fn has_encrypted_values(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::String(s) => {
+            crate::security::encryption::SecretEncryption::is_encrypted(s)
+        }
+        serde_json::Value::Object(map) => map.values().any(has_encrypted_values),
+        serde_json::Value::Array(arr) => arr.iter().any(has_encrypted_values),
+        _ => false,
+    }
+}
+
+/// Decrypt all `ENC[...]` string values in the JSON tree in place.
+fn decrypt_config_values(
+    value: &mut serde_json::Value,
+    enc: &crate::security::encryption::SecretEncryption,
+) -> Result<()> {
+    match value {
+        serde_json::Value::String(s) => {
+            if crate::security::encryption::SecretEncryption::is_encrypted(s) {
+                *s = enc.decrypt(s)?;
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for val in map.values_mut() {
+                decrypt_config_values(val, enc)?;
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr.iter_mut() {
+                decrypt_config_values(item, enc)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 /// Expand ~ to home directory in a path string

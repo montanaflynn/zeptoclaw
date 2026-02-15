@@ -13,6 +13,7 @@ pub mod history;
 pub mod memory;
 pub mod migrate;
 pub mod onboard;
+pub mod secrets;
 pub mod skills;
 pub mod status;
 pub mod template;
@@ -78,6 +79,9 @@ enum Commands {
         /// Run in container isolation [optional: docker, apple]
         #[arg(long, num_args = 0..=1, default_missing_value = "auto", value_name = "BACKEND")]
         containerized: Option<String>,
+        /// Start a tunnel to expose gateway publicly [cloudflare, ngrok, tailscale, auto]
+        #[arg(long, value_name = "PROVIDER")]
+        tunnel: Option<String>,
     },
     /// Run agent in stdin/stdout mode (for containerized execution)
     AgentStdin,
@@ -133,6 +137,11 @@ enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigAction,
+    },
+    /// Manage secret encryption
+    Secrets {
+        #[command(subcommand)]
+        action: SecretsAction,
     },
     /// Watch a URL for changes and notify
     Watch {
@@ -289,6 +298,16 @@ pub enum TemplateAction {
     },
 }
 
+#[derive(Subcommand)]
+pub enum SecretsAction {
+    /// Encrypt all plaintext secrets in config
+    Encrypt,
+    /// Decrypt all secrets for editing
+    Decrypt,
+    /// Re-encrypt with a new key
+    Rotate,
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
 pub enum BatchFormat {
     Text,
@@ -344,8 +363,11 @@ pub async fn run() -> Result<()> {
         }) => {
             batch::cmd_batch(input, output, format, stop_on_error, stream, template).await?;
         }
-        Some(Commands::Gateway { containerized }) => {
-            gateway::cmd_gateway(containerized).await?;
+        Some(Commands::Gateway {
+            containerized,
+            tunnel,
+        }) => {
+            gateway::cmd_gateway(containerized, tunnel).await?;
         }
         Some(Commands::AgentStdin) => {
             agent::cmd_agent_stdin().await?;
@@ -379,6 +401,9 @@ pub async fn run() -> Result<()> {
         }
         Some(Commands::Config { action }) => {
             config::cmd_config(action).await?;
+        }
+        Some(Commands::Secrets { action }) => {
+            secrets::cmd_secrets(action).await?;
         }
         Some(Commands::Watch {
             url,

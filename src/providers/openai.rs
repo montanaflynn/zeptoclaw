@@ -1231,6 +1231,111 @@ mod tests {
         assert_eq!(usage.total_tokens, 15);
     }
 
+    // ========================================================================
+    // OpenAI-compatible provider (custom base URL) tests
+    // ========================================================================
+
+    #[test]
+    fn test_with_base_url_stores_url() {
+        let provider = OpenAIProvider::with_base_url("test-key", "http://localhost:11434/v1");
+        assert_eq!(provider.name(), "openai");
+        assert_eq!(provider.api_base, "http://localhost:11434/v1");
+    }
+
+    #[test]
+    fn test_with_base_url_trims_trailing_slash() {
+        let provider = OpenAIProvider::with_base_url("test-key", "http://localhost:11434/v1/");
+        assert_eq!(provider.name(), "openai");
+        assert_eq!(provider.api_base, "http://localhost:11434/v1");
+    }
+
+    #[test]
+    fn test_with_base_url_trims_multiple_trailing_slashes() {
+        let provider = OpenAIProvider::with_base_url("test-key", "http://localhost:11434/v1///");
+        assert_eq!(provider.api_base, "http://localhost:11434/v1");
+    }
+
+    #[test]
+    fn test_with_base_url_preserves_non_trailing_slashes() {
+        let provider =
+            OpenAIProvider::with_base_url("test-key", "http://localhost:11434/api/v1/chat");
+        assert_eq!(provider.api_base, "http://localhost:11434/api/v1/chat");
+    }
+
+    #[test]
+    fn test_provider_config_api_base_parsing() {
+        let json = r#"{"providers": {"openai": {"api_key": "test-key", "api_base": "http://localhost:11434/v1"}}}"#;
+        let config: crate::config::Config = serde_json::from_str(json).unwrap();
+        let openai = config.providers.openai.unwrap();
+        assert_eq!(openai.api_base.unwrap(), "http://localhost:11434/v1");
+        assert_eq!(openai.api_key.unwrap(), "test-key");
+    }
+
+    #[test]
+    fn test_provider_config_api_base_absent() {
+        let json = r#"{"providers": {"openai": {"api_key": "test-key"}}}"#;
+        let config: crate::config::Config = serde_json::from_str(json).unwrap();
+        let openai = config.providers.openai.unwrap();
+        assert!(openai.api_base.is_none());
+    }
+
+    #[test]
+    fn test_provider_config_ollama_example() {
+        let json = r#"{"providers": {"ollama": {"api_base": "http://localhost:11434/v1"}}}"#;
+        let config: crate::config::Config = serde_json::from_str(json).unwrap();
+        let ollama = config.providers.ollama.unwrap();
+        assert_eq!(ollama.api_base.unwrap(), "http://localhost:11434/v1");
+        assert!(ollama.api_key.is_none());
+    }
+
+    #[test]
+    fn test_provider_config_groq_example() {
+        let json = r#"{"providers": {"groq": {"api_key": "gsk_test", "api_base": "https://api.groq.com/openai/v1"}}}"#;
+        let config: crate::config::Config = serde_json::from_str(json).unwrap();
+        let groq = config.providers.groq.unwrap();
+        assert_eq!(groq.api_key.unwrap(), "gsk_test");
+        assert_eq!(groq.api_base.unwrap(), "https://api.groq.com/openai/v1");
+    }
+
+    #[test]
+    fn test_provider_config_vllm_example() {
+        let json = r#"{"providers": {"vllm": {"api_base": "http://gpu-server:8000/v1"}}}"#;
+        let config: crate::config::Config = serde_json::from_str(json).unwrap();
+        let vllm = config.providers.vllm.unwrap();
+        assert_eq!(vllm.api_base.unwrap(), "http://gpu-server:8000/v1");
+        assert!(vllm.api_key.is_none());
+    }
+
+    #[test]
+    fn test_with_base_url_together_example() {
+        let provider = OpenAIProvider::with_base_url("tog_test", "https://api.together.xyz/v1");
+        assert_eq!(provider.api_base, "https://api.together.xyz/v1");
+    }
+
+    #[test]
+    fn test_with_base_url_fireworks_example() {
+        let provider =
+            OpenAIProvider::with_base_url("fw_test", "https://api.fireworks.ai/inference/v1");
+        assert_eq!(provider.api_base, "https://api.fireworks.ai/inference/v1");
+    }
+
+    #[test]
+    fn test_with_base_url_lm_studio_example() {
+        let provider = OpenAIProvider::with_base_url("key", "http://localhost:1234/v1");
+        assert_eq!(provider.api_base, "http://localhost:1234/v1");
+    }
+
+    #[test]
+    fn test_chat_completions_url_uses_api_base() {
+        let provider = OpenAIProvider::with_base_url("key", "http://localhost:11434/v1");
+        let url = format!("{}/chat/completions", provider.api_base);
+        assert_eq!(url, "http://localhost:11434/v1/chat/completions");
+
+        let provider2 = OpenAIProvider::with_base_url("key", "https://api.groq.com/openai/v1");
+        let url2 = format!("{}/chat/completions", provider2.api_base);
+        assert_eq!(url2, "https://api.groq.com/openai/v1/chat/completions");
+    }
+
     #[test]
     fn test_apply_stream_chunk_assembles_tool_calls() {
         let mut assembled = String::new();

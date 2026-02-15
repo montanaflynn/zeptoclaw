@@ -26,6 +26,7 @@ pub mod security;
 pub mod session;
 pub mod skills;
 pub mod tools;
+pub mod tunnel;
 pub mod utils;
 
 pub use agent::{AgentLoop, ContextBuilder};
