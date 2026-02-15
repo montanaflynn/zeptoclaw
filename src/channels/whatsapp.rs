@@ -120,6 +120,7 @@ impl WhatsAppChannel {
         let base_config = BaseChannelConfig {
             name: "whatsapp".to_string(),
             allowlist: config.allow_from.clone(),
+            deny_by_default: config.deny_by_default,
         };
 
         Self {
@@ -515,6 +516,7 @@ mod tests {
             bridge_url: "ws://localhost:3001".to_string(),
             allow_from: vec!["60123456789".to_string()],
             bridge_managed: true,
+            ..Default::default()
         }
     }
 
@@ -537,6 +539,7 @@ mod tests {
             bridge_url: "ws://bridge:3001".to_string(),
             allow_from: vec!["U1".to_string(), "U2".to_string()],
             bridge_managed: true,
+            ..Default::default()
         };
         let channel = WhatsAppChannel::new(config, test_bus());
 
@@ -564,6 +567,7 @@ mod tests {
             bridge_url: "ws://localhost:3001".to_string(),
             allow_from: vec![],
             bridge_managed: true,
+            ..Default::default()
         };
         let channel = WhatsAppChannel::new(config, test_bus());
 
@@ -857,6 +861,7 @@ mod tests {
             bridge_url: "ws://localhost:3001".to_string(),
             allow_from: vec![],
             bridge_managed: true,
+            ..Default::default()
         };
         let mut channel = WhatsAppChannel::new(config, test_bus());
 
@@ -872,6 +877,7 @@ mod tests {
             bridge_url: String::new(),
             allow_from: vec![],
             bridge_managed: true,
+            ..Default::default()
         };
         let mut channel = WhatsAppChannel::new(config, test_bus());
 
@@ -903,6 +909,7 @@ mod tests {
             bridge_url: "ws://localhost:3001".to_string(),
             allow_from: vec![],
             bridge_managed: true,
+            ..Default::default()
         };
         let mut channel = WhatsAppChannel::new(config, test_bus());
         // Manually set running + outbound channel (avoids actual WebSocket connect)

@@ -130,6 +130,7 @@ impl DiscordChannel {
         let base_config = BaseChannelConfig {
             name: "discord".to_string(),
             allowlist: config.allow_from.clone(),
+            deny_by_default: config.deny_by_default,
         };
 
         Self {
@@ -767,6 +768,7 @@ mod tests {
             enabled: true,
             token: "test-bot-token".to_string(),
             allow_from: vec!["123456789".to_string()],
+            ..Default::default()
         }
     }
 
@@ -788,6 +790,7 @@ mod tests {
             enabled: true,
             token: "my-token".to_string(),
             allow_from: vec!["U1".to_string(), "U2".to_string()],
+            ..Default::default()
         };
         let channel = DiscordChannel::new(config, test_bus());
 
@@ -814,6 +817,7 @@ mod tests {
             enabled: true,
             token: "tok".to_string(),
             allow_from: vec![],
+            ..Default::default()
         };
         let channel = DiscordChannel::new(config, test_bus());
 
@@ -1003,6 +1007,7 @@ mod tests {
             enabled: true,
             token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let mut channel = DiscordChannel::new(config, test_bus());
 
@@ -1017,6 +1022,7 @@ mod tests {
             enabled: false,
             token: "some-token".to_string(),
             allow_from: vec![],
+            ..Default::default()
         };
         let mut channel = DiscordChannel::new(config, test_bus());
 

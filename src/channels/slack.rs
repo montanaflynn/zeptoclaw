@@ -90,6 +90,7 @@ impl SlackChannel {
         let base_config = BaseChannelConfig {
             name: "slack".to_string(),
             allowlist: config.allow_from.clone(),
+            deny_by_default: config.deny_by_default,
         };
 
         Self {
@@ -494,6 +495,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: "xapp-test-token".to_string(),
             allow_from: vec!["U123".to_string()],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
 
@@ -510,6 +512,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
 
@@ -523,6 +526,7 @@ mod tests {
             bot_token: "xoxb-my-token".to_string(),
             app_token: "xapp-token".to_string(),
             allow_from: vec!["UADMIN".to_string()],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
 
@@ -538,6 +542,7 @@ mod tests {
             bot_token: String::new(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let mut channel = SlackChannel::new(config, test_bus());
 
@@ -553,6 +558,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let mut channel = SlackChannel::new(config, test_bus());
 
@@ -568,6 +574,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let mut channel = SlackChannel::new(config, test_bus());
 
@@ -582,6 +589,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
 
@@ -597,6 +605,7 @@ mod tests {
             bot_token: "xoxb-test-token".to_string(),
             app_token: String::new(),
             allow_from: vec![],
+            ..Default::default()
         };
         let channel = SlackChannel::new(config, test_bus());
         channel.running.store(true, Ordering::SeqCst);

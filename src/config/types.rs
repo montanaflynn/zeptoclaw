@@ -263,9 +263,12 @@ pub struct WebhookConfig {
     /// Optional Bearer token for request authentication
     #[serde(default)]
     pub auth_token: Option<String>,
-    /// Allowlist of sender IDs (empty = allow all)
+    /// Allowlist of sender IDs (empty = allow all unless `deny_by_default` is set)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// When true, empty `allow_from` rejects all senders (strict mode).
+    #[serde(default)]
+    pub deny_by_default: bool,
 }
 
 fn default_webhook_bind_address() -> String {
@@ -289,6 +292,7 @@ impl Default for WebhookConfig {
             path: default_webhook_path(),
             auth_token: None,
             allow_from: Vec::new(),
+            deny_by_default: false,
         }
     }
 }
@@ -301,9 +305,12 @@ pub struct TelegramConfig {
     pub enabled: bool,
     /// Bot token from BotFather
     pub token: String,
-    /// Allowlist of user IDs/usernames (empty = allow all)
+    /// Allowlist of user IDs/usernames (empty = allow all unless `deny_by_default` is set)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// When true, empty `allow_from` rejects all senders (strict mode).
+    #[serde(default)]
+    pub deny_by_default: bool,
 }
 
 /// Discord channel configuration
@@ -314,9 +321,12 @@ pub struct DiscordConfig {
     pub enabled: bool,
     /// Bot token from Discord Developer Portal
     pub token: String,
-    /// Allowlist of user IDs (empty = allow all)
+    /// Allowlist of user IDs (empty = allow all unless `deny_by_default` is set)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// When true, empty `allow_from` rejects all senders (strict mode).
+    #[serde(default)]
+    pub deny_by_default: bool,
 }
 
 /// Slack channel configuration
@@ -329,9 +339,12 @@ pub struct SlackConfig {
     pub bot_token: String,
     /// App-level token (xapp-...)
     pub app_token: String,
-    /// Allowlist of user IDs (empty = allow all)
+    /// Allowlist of user IDs (empty = allow all unless `deny_by_default` is set)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// When true, empty `allow_from` rejects all senders (strict mode).
+    #[serde(default)]
+    pub deny_by_default: bool,
 }
 
 /// WhatsApp channel configuration (via bridge)
@@ -343,9 +356,12 @@ pub struct WhatsAppConfig {
     /// WebSocket bridge URL
     #[serde(default = "default_whatsapp_bridge_url")]
     pub bridge_url: String,
-    /// Allowlist of phone numbers (empty = allow all)
+    /// Allowlist of phone numbers (empty = allow all unless `deny_by_default` is set)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// When true, empty `allow_from` rejects all senders (strict mode).
+    #[serde(default)]
+    pub deny_by_default: bool,
     /// Whether ZeptoClaw manages the bridge binary lifecycle.
     /// When true, `channel setup` and `gateway` will auto-install and start the bridge.
     /// When false, the user manages the bridge process externally.
@@ -367,6 +383,7 @@ impl Default for WhatsAppConfig {
             enabled: false,
             bridge_url: default_whatsapp_bridge_url(),
             allow_from: Vec::new(),
+            deny_by_default: false,
             bridge_managed: default_bridge_managed(),
         }
     }
@@ -388,9 +405,12 @@ pub struct FeishuConfig {
     /// Verification Token
     #[serde(default)]
     pub verification_token: String,
-    /// Allowlist of user IDs (empty = allow all)
+    /// Allowlist of user IDs (empty = allow all unless `deny_by_default` is set)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// When true, empty `allow_from` rejects all senders (strict mode).
+    #[serde(default)]
+    pub deny_by_default: bool,
 }
 
 /// MaixCam channel configuration
@@ -405,9 +425,12 @@ pub struct MaixCamConfig {
     /// Port to listen on
     #[serde(default = "default_maixcam_port")]
     pub port: u16,
-    /// Allowlist of device IDs (empty = allow all)
+    /// Allowlist of device IDs (empty = allow all unless `deny_by_default` is set)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// When true, empty `allow_from` rejects all senders (strict mode).
+    #[serde(default)]
+    pub deny_by_default: bool,
 }
 
 fn default_maixcam_host() -> String {
@@ -425,6 +448,7 @@ impl Default for MaixCamConfig {
             host: default_maixcam_host(),
             port: default_maixcam_port(),
             allow_from: Vec::new(),
+            deny_by_default: false,
         }
     }
 }
@@ -439,9 +463,12 @@ pub struct QQConfig {
     pub app_id: String,
     /// App Secret
     pub app_secret: String,
-    /// Allowlist of QQ numbers (empty = allow all)
+    /// Allowlist of QQ numbers (empty = allow all unless `deny_by_default` is set)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// When true, empty `allow_from` rejects all senders (strict mode).
+    #[serde(default)]
+    pub deny_by_default: bool,
 }
 
 /// DingTalk channel configuration
@@ -454,9 +481,12 @@ pub struct DingTalkConfig {
     pub client_id: String,
     /// Client Secret
     pub client_secret: String,
-    /// Allowlist of user IDs (empty = allow all)
+    /// Allowlist of user IDs (empty = allow all unless `deny_by_default` is set)
     #[serde(default)]
     pub allow_from: Vec<String>,
+    /// When true, empty `allow_from` rejects all senders (strict mode).
+    #[serde(default)]
+    pub deny_by_default: bool,
 }
 
 // ============================================================================
