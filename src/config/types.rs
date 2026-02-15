@@ -53,6 +53,8 @@ pub struct Config {
     pub mcp: McpConfig,
     /// Routines (event/webhook/cron triggers) configuration
     pub routines: RoutinesConfig,
+    /// Tunnel configuration for exposing local ports publicly
+    pub tunnel: TunnelConfig,
     /// Custom CLI-defined tools (shell commands as agent tools).
     #[serde(default)]
     pub custom_tools: Vec<CustomToolDef>,
@@ -140,6 +142,61 @@ impl Default for RoutinesConfig {
             max_concurrent: 3,
         }
     }
+}
+
+// ============================================================================
+// Tunnel Configuration
+// ============================================================================
+
+/// Tunnel configuration for exposing local ports via public URLs.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TunnelConfig {
+    /// Tunnel provider name ("cloudflare", "ngrok", "tailscale", or "auto").
+    pub provider: Option<String>,
+    /// Cloudflare Tunnel configuration.
+    pub cloudflare: Option<CloudflareTunnelConfig>,
+    /// ngrok tunnel configuration.
+    pub ngrok: Option<NgrokTunnelConfig>,
+    /// Tailscale Funnel/Serve configuration.
+    pub tailscale: Option<TailscaleTunnelConfig>,
+}
+
+/// Cloudflare Tunnel provider configuration.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CloudflareTunnelConfig {
+    /// Cloudflare Tunnel token for named tunnels. If omitted, uses quick tunnel (trycloudflare.com).
+    pub token: Option<String>,
+}
+
+/// ngrok tunnel provider configuration.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NgrokTunnelConfig {
+    /// ngrok authtoken for authenticated tunnels.
+    pub authtoken: Option<String>,
+    /// Custom domain to use (requires ngrok paid plan).
+    pub domain: Option<String>,
+}
+
+/// Tailscale Funnel/Serve provider configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TailscaleTunnelConfig {
+    /// Use Tailscale Funnel (public) instead of Serve (tailnet-only). Default: true.
+    #[serde(default = "default_true")]
+    pub funnel: bool,
+}
+
+impl Default for TailscaleTunnelConfig {
+    fn default() -> Self {
+        Self { funnel: true }
+    }
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Agent configuration
@@ -1230,5 +1287,41 @@ mod tests {
             config.agents.defaults.tool_profile.as_ref().unwrap(),
             "minimal"
         );
+    }
+
+    #[test]
+    fn test_tunnel_config_defaults() {
+        let config = TunnelConfig::default();
+        assert!(config.provider.is_none());
+        assert!(config.cloudflare.is_none());
+        assert!(config.ngrok.is_none());
+        assert!(config.tailscale.is_none());
+    }
+
+    #[test]
+    fn test_tunnel_config_deserialize() {
+        let json = r#"{"tunnel": {"provider": "cloudflare", "cloudflare": {"token": "abc"}}}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.tunnel.provider.as_deref(), Some("cloudflare"));
+        assert_eq!(
+            config.tunnel.cloudflare.as_ref().unwrap().token.as_deref(),
+            Some("abc")
+        );
+    }
+
+    #[test]
+    fn test_tailscale_tunnel_config_default_funnel_true() {
+        let config = TailscaleTunnelConfig::default();
+        assert!(config.funnel);
+    }
+
+    #[test]
+    fn test_ngrok_tunnel_config_deserialize() {
+        let json = r#"{"tunnel": {"provider": "ngrok", "ngrok": {"authtoken": "tok_123", "domain": "my.ngrok.io"}}}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.tunnel.provider.as_deref(), Some("ngrok"));
+        let ngrok = config.tunnel.ngrok.as_ref().unwrap();
+        assert_eq!(ngrok.authtoken.as_deref(), Some("tok_123"));
+        assert_eq!(ngrok.domain.as_deref(), Some("my.ngrok.io"));
     }
 }
