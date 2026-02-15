@@ -447,6 +447,15 @@ Enable runtime.allow_fallback_to_native to opt in to native fallback.",
     if tool_enabled("r8r") {
         agent.register_tool(Box::new(R8rTool::default())).await;
     }
+    if tool_enabled("reminder") {
+        match zeptoclaw::tools::reminder::ReminderTool::new(Some(cron_service.clone())) {
+            Ok(tool) => {
+                agent.register_tool(Box::new(tool)).await;
+                info!("Registered reminder tool");
+            }
+            Err(e) => warn!("Failed to initialize reminder tool: {}", e),
+        }
+    }
 
     // Register plugin tools (command-mode and binary-mode)
     if config.plugins.enabled {

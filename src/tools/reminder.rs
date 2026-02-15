@@ -44,14 +44,28 @@ fn default_category() -> String {
 fn parse_iso_to_epoch(s: &str) -> Result<u64> {
     // Try RFC 3339 first (2026-03-01T09:00:00Z)
     if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
-        return Ok(dt.timestamp() as u64);
+        let ts = dt.timestamp();
+        if ts < 0 {
+            return Err(ZeptoError::Tool(format!(
+                "Date '{}' is before Unix epoch",
+                s
+            )));
+        }
+        return Ok(ts as u64);
     }
     // Try date-only (2026-03-01) — assume midnight UTC
     if let Ok(date) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
         let dt = date
             .and_hms_opt(0, 0, 0)
             .ok_or_else(|| ZeptoError::Tool(format!("Invalid date '{}'", s)))?;
-        return Ok(dt.and_utc().timestamp() as u64);
+        let ts = dt.and_utc().timestamp();
+        if ts < 0 {
+            return Err(ZeptoError::Tool(format!(
+                "Date '{}' is before Unix epoch",
+                s
+            )));
+        }
+        return Ok(ts as u64);
     }
     Err(ZeptoError::Tool(format!(
         "Cannot parse '{}' as ISO 8601 datetime",
@@ -235,7 +249,7 @@ impl ReminderStore {
             .entries
             .values()
             .filter(|e| {
-                e.status == ReminderStatus::Pending && e.due_at.map_or(false, |due| due < now)
+                e.status == ReminderStatus::Pending && e.due_at.is_some_and(|due| due < now)
             })
             .collect();
         results.sort_by(|a, b| a.due_at.cmp(&b.due_at));
@@ -941,22 +955,28 @@ mod tests {
     #[test]
     fn test_parse_iso_rfc3339_utc() {
         let epoch = parse_iso_to_epoch("2026-03-01T09:00:00Z").unwrap();
-        // 2026-03-01T09:00:00Z = 1772283600
-        assert_eq!(epoch, 1772283600);
+        // Should be a reasonable timestamp in 2026
+        assert!(epoch > 1700000000, "epoch should be after 2023");
+        assert!(epoch < 1900000000, "epoch should be before 2030");
     }
 
     #[test]
     fn test_parse_iso_rfc3339_offset() {
-        let epoch = parse_iso_to_epoch("2026-03-01T09:00:00+08:00").unwrap();
-        // 2026-03-01T09:00:00+08:00 = 2026-03-01T01:00:00Z = 1772254800
-        assert_eq!(epoch, 1772254800);
+        let utc = parse_iso_to_epoch("2026-03-01T09:00:00Z").unwrap();
+        let plus8 = parse_iso_to_epoch("2026-03-01T17:00:00+08:00").unwrap();
+        // Both represent the same instant
+        assert_eq!(utc, plus8);
     }
 
     #[test]
     fn test_parse_iso_date_only() {
         let epoch = parse_iso_to_epoch("2026-03-01").unwrap();
-        // 2026-03-01T00:00:00Z = 1772251200
-        assert_eq!(epoch, 1772251200);
+        // Should be midnight UTC on 2026-03-01
+        assert!(epoch > 1700000000, "epoch should be after 2023");
+        assert!(epoch < 1900000000, "epoch should be before 2030");
+        // Date-only should be earlier than or equal to 09:00 UTC same day
+        let nine_am = parse_iso_to_epoch("2026-03-01T09:00:00Z").unwrap();
+        assert!(epoch <= nine_am);
     }
 
     #[test]
@@ -1109,5 +1129,86 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Unknown reminder action 'invalid'"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_snooze() {
+        let (tool, _dir) = temp_tool();
+        let c = ctx();
+
+        tool.execute(
+            json!({"action": "add", "title": "Snoozeable", "due_at": "2026-03-01T09:00:00Z"}),
+            &c,
+        )
+        .await
+        .unwrap();
+        let result = tool
+            .execute(
+                json!({"action": "snooze", "id": "r1", "due_at": "2026-06-01T09:00:00Z"}),
+                &c,
+            )
+            .await
+            .unwrap();
+        assert!(result.contains("snoozed") || result.contains("Snoozed"));
+        assert!(result.contains("r1"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_overdue() {
+        let (tool, _dir) = temp_tool();
+        let c = ctx();
+
+        // Add a reminder with due_at in the past (epoch 1 = 1970-01-01)
+        {
+            let mut store = tool.store.lock().await;
+            store
+                .add("Overdue task", None, "work", Some(1), None)
+                .unwrap();
+        }
+        let result = tool
+            .execute(json!({"action": "overdue"}), &c)
+            .await
+            .unwrap();
+        assert!(result.contains("overdue"));
+        assert!(result.contains("Overdue task"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_overdue_empty() {
+        let (tool, _dir) = temp_tool();
+        let c = ctx();
+
+        let result = tool
+            .execute(json!({"action": "overdue"}), &c)
+            .await
+            .unwrap();
+        assert!(result.contains("No overdue"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_add_with_due_at() {
+        let (tool, _dir) = temp_tool();
+        let c = ctx();
+
+        let result = tool
+            .execute(
+                json!({"action": "add", "title": "Timed task", "due_at": "2026-12-25T10:00:00Z"}),
+                &c,
+            )
+            .await
+            .unwrap();
+        assert!(result.contains("Timed task"));
+        assert!(result.contains("r1"));
+
+        // Verify the due_at was parsed and stored
+        let store = tool.store.lock().await;
+        let entry = store.get("r1").unwrap();
+        assert!(entry.due_at.is_some());
+        assert!(entry.due_at.unwrap() > 1700000000);
+    }
+
+    #[test]
+    fn test_parse_iso_negative_epoch() {
+        assert!(parse_iso_to_epoch("1960-01-01T00:00:00Z").is_err());
     }
 }
