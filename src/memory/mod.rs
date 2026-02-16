@@ -1,6 +1,7 @@
 //! Workspace memory utilities (OpenClaw-style markdown memory).
 
 pub mod longterm;
+pub mod traits;
 
 use std::collections::HashSet;
 use std::fs;
