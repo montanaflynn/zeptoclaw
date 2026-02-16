@@ -337,13 +337,7 @@ impl AgentLoop {
     pub async fn process_message(&self, msg: &InboundMessage) -> Result<String> {
         // Acquire a per-session lock to serialize concurrent messages for the
         // same session key. Different sessions can still proceed concurrently.
-        let session_lock = {
-            let mut locks = self.session_locks.lock().await;
-            locks
-                .entry(msg.session_key.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(())))
-                .clone()
-        };
+        let session_lock = self.session_lock_for(&msg.session_key).await;
         let _session_guard = session_lock.lock().await;
 
         // Clone the provider Arc early and release the RwLock immediately.
@@ -686,13 +680,7 @@ impl AgentLoop {
         use crate::providers::StreamEvent;
 
         // Acquire per-session lock
-        let session_lock = {
-            let mut locks = self.session_locks.lock().await;
-            locks
-                .entry(msg.session_key.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(())))
-                .clone()
-        };
+        let session_lock = self.session_lock_for(&msg.session_key).await;
         let _session_guard = session_lock.lock().await;
 
         let provider = {
@@ -1126,16 +1114,167 @@ impl AgentLoop {
         info!("memory_flush: completed");
     }
 
+    async fn session_lock_for(&self, session_key: &str) -> Arc<Mutex<()>> {
+        let mut locks = self.session_locks.lock().await;
+        locks
+            .entry(session_key.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    }
+
+    fn token_snapshot(usage_metrics: Option<&Arc<UsageMetrics>>) -> Option<(u64, u64)> {
+        usage_metrics.map(|metrics| {
+            (
+                metrics
+                    .input_tokens
+                    .load(std::sync::atomic::Ordering::Relaxed),
+                metrics
+                    .output_tokens
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            )
+        })
+    }
+
+    fn token_delta(
+        usage_metrics: Option<&Arc<UsageMetrics>>,
+        before: Option<(u64, u64)>,
+    ) -> (u64, u64) {
+        before
+            .and_then(|(input_before, output_before)| {
+                usage_metrics.map(|metrics| {
+                    let input_after = metrics
+                        .input_tokens
+                        .load(std::sync::atomic::Ordering::Relaxed);
+                    let output_after = metrics
+                        .output_tokens
+                        .load(std::sync::atomic::Ordering::Relaxed);
+                    (
+                        input_after.saturating_sub(input_before),
+                        output_after.saturating_sub(output_before),
+                    )
+                })
+            })
+            .unwrap_or((0, 0))
+    }
+
+    async fn drain_pending_messages(&self, msg: &InboundMessage) {
+        let pending = {
+            let mut map = self.pending_messages.lock().await;
+            map.remove(&msg.session_key).unwrap_or_default()
+        };
+
+        if pending.is_empty() {
+            return;
+        }
+
+        match self.config.agents.defaults.message_queue_mode {
+            crate::config::MessageQueueMode::Collect => {
+                let combined: Vec<String> = pending
+                    .iter()
+                    .enumerate()
+                    .map(|(index, item)| format!("{}. {}", index + 1, item.content))
+                    .collect();
+                let combined_content = format!(
+                    "[Queued messages while I was busy]\n\n{}",
+                    combined.join("\n")
+                );
+                let synthetic = InboundMessage::new(
+                    &msg.channel,
+                    &msg.sender_id,
+                    &msg.chat_id,
+                    &combined_content,
+                );
+                if let Err(e) = self.bus.publish_inbound(synthetic).await {
+                    error!("Failed to re-queue collected messages: {}", e);
+                }
+            }
+            crate::config::MessageQueueMode::Followup => {
+                for pending_msg in pending {
+                    if let Err(e) = self.bus.publish_inbound(pending_msg).await {
+                        error!("Failed to re-queue followup message: {}", e);
+                    }
+                }
+            }
+        }
+    }
+
+    async fn process_inbound_message(
+        &self,
+        msg: &InboundMessage,
+        usage_metrics: Option<Arc<UsageMetrics>>,
+    ) {
+        info!("Processing message");
+        let start = std::time::Instant::now();
+        let tokens_before = Self::token_snapshot(usage_metrics.as_ref());
+
+        if let Some(metrics) = usage_metrics.as_ref() {
+            metrics.record_request();
+        }
+
+        let timeout_duration =
+            std::time::Duration::from_secs(self.config.agents.defaults.agent_timeout_secs);
+        let process_result =
+            tokio::time::timeout(timeout_duration, self.process_message(msg)).await;
+
+        match process_result {
+            Ok(Ok(response)) => {
+                let latency_ms = start.elapsed().as_millis() as u64;
+                let (input_tokens, output_tokens) =
+                    Self::token_delta(usage_metrics.as_ref(), tokens_before);
+
+                info!(
+                    latency_ms = latency_ms,
+                    response_len = response.len(),
+                    input_tokens = input_tokens,
+                    output_tokens = output_tokens,
+                    "Request completed"
+                );
+
+                let outbound = OutboundMessage::new(&msg.channel, &msg.chat_id, &response);
+                if let Err(e) = self.bus.publish_outbound(outbound).await {
+                    error!("Failed to publish outbound message: {}", e);
+                    if let Some(metrics) = usage_metrics.as_ref() {
+                        metrics.record_error();
+                    }
+                }
+            }
+            Ok(Err(e)) => {
+                let latency_ms = start.elapsed().as_millis() as u64;
+                error!(latency_ms = latency_ms, error = %e, "Request failed");
+                if let Some(metrics) = usage_metrics.as_ref() {
+                    metrics.record_error();
+                }
+
+                let error_msg =
+                    OutboundMessage::new(&msg.channel, &msg.chat_id, &format!("Error: {}", e));
+                self.bus.publish_outbound(error_msg).await.ok();
+            }
+            Err(_elapsed) => {
+                let timeout_secs = self.config.agents.defaults.agent_timeout_secs;
+                error!(timeout_secs = timeout_secs, "Agent run timed out");
+                if let Some(metrics) = usage_metrics.as_ref() {
+                    metrics.record_error();
+                }
+
+                let timeout_msg = OutboundMessage::new(
+                    &msg.channel,
+                    &msg.chat_id,
+                    &format!(
+                        "Agent run timed out after {}s. Try a simpler request.",
+                        timeout_secs
+                    ),
+                );
+                self.bus.publish_outbound(timeout_msg).await.ok();
+            }
+        }
+
+        self.drain_pending_messages(msg).await;
+    }
+
     /// Try to queue a message if the session is busy, or return false if lock is free.
     /// Returns `true` if the message was queued (caller should not wait for response).
     pub async fn try_queue_or_process(&self, msg: &InboundMessage) -> bool {
-        let session_lock = {
-            let mut locks = self.session_locks.lock().await;
-            locks
-                .entry(msg.session_key.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(())))
-                .clone()
-        };
+        let session_lock = self.session_lock_for(&msg.session_key).await;
 
         // Try to acquire the lock without blocking
         let is_busy = session_lock.try_lock().is_err();
@@ -1216,131 +1355,23 @@ impl AgentLoop {
                             sender = %msg.sender_id,
                         );
                         let msg_ref = &msg;
-                        let bus_ref = &self.bus;
-                        let usage_metrics = {
-                            let metrics = self.usage_metrics.read().await;
-                            metrics.clone()
-                        };
                         async {
-                            info!("Processing message");
-                            let start = std::time::Instant::now();
-                            let tokens_before = usage_metrics.as_ref().map(|m| {
-                                (
-                                    m.input_tokens.load(std::sync::atomic::Ordering::Relaxed),
-                                    m.output_tokens.load(std::sync::atomic::Ordering::Relaxed),
-                                )
-                            });
-                            if let Some(metrics) = usage_metrics.as_ref() {
-                                metrics.record_request();
+                            // Fast-path: if this session is already processing a
+                            // message, queue instead of blocking the select loop.
+                            // The queued message is drained and re-published to
+                            // the bus after the active request completes.
+                            if self.try_queue_or_process(msg_ref).await {
+                                return;
                             }
 
-                            let timeout_duration = std::time::Duration::from_secs(
-                                self.config.agents.defaults.agent_timeout_secs,
-                            );
-                            let process_result = tokio::time::timeout(
-                                timeout_duration,
-                                self.process_message(msg_ref),
-                            )
-                            .await;
-
-                            match process_result {
-                                Ok(Ok(response)) => {
-                                    let latency_ms = start.elapsed().as_millis() as u64;
-                                    let (input_tokens, output_tokens) = tokens_before
-                                        .and_then(|(ib, ob)| {
-                                            usage_metrics.as_ref().map(|m| {
-                                                let ia = m.input_tokens.load(std::sync::atomic::Ordering::Relaxed);
-                                                let oa = m.output_tokens.load(std::sync::atomic::Ordering::Relaxed);
-                                                (ia.saturating_sub(ib), oa.saturating_sub(ob))
-                                            })
-                                        })
-                                        .unwrap_or((0, 0));
-                                    info!(
-                                        latency_ms = latency_ms,
-                                        response_len = response.len(),
-                                        input_tokens = input_tokens,
-                                        output_tokens = output_tokens,
-                                        "Request completed"
-                                    );
-
-                                    let outbound = OutboundMessage::new(&msg_ref.channel, &msg_ref.chat_id, &response);
-                                    if let Err(e) = bus_ref.publish_outbound(outbound).await {
-                                        error!("Failed to publish outbound message: {}", e);
-                                        if let Some(metrics) = usage_metrics.as_ref() {
-                                            metrics.record_error();
-                                        }
-                                    }
-                                }
-                                Ok(Err(e)) => {
-                                    let latency_ms = start.elapsed().as_millis() as u64;
-                                    error!(latency_ms = latency_ms, error = %e, "Request failed");
-                                    if let Some(metrics) = usage_metrics.as_ref() {
-                                        metrics.record_error();
-                                    }
-
-                                    let error_msg = OutboundMessage::new(
-                                        &msg_ref.channel,
-                                        &msg_ref.chat_id,
-                                        &format!("Error: {}", e),
-                                    );
-                                    bus_ref.publish_outbound(error_msg).await.ok();
-                                }
-                                Err(_elapsed) => {
-                                    let timeout_secs = self.config.agents.defaults.agent_timeout_secs;
-                                    error!(timeout_secs = timeout_secs, "Agent run timed out");
-                                    if let Some(metrics) = usage_metrics.as_ref() {
-                                        metrics.record_error();
-                                    }
-
-                                    let timeout_msg = OutboundMessage::new(
-                                        &msg_ref.channel,
-                                        &msg_ref.chat_id,
-                                        &format!("Agent run timed out after {}s. Try a simpler request.", timeout_secs),
-                                    );
-                                    bus_ref.publish_outbound(timeout_msg).await.ok();
-                                }
-                            }
-
-                            // After processing, drain any pending messages for this session
-                            let pending = {
-                                let mut map = self.pending_messages.lock().await;
-                                map.remove(&msg_ref.session_key).unwrap_or_default()
+                            let usage_metrics = {
+                                let metrics = self.usage_metrics.read().await;
+                                metrics.clone()
                             };
-
-                            if !pending.is_empty() {
-                                match self.config.agents.defaults.message_queue_mode {
-                                    crate::config::MessageQueueMode::Collect => {
-                                        // Concatenate all pending messages into one
-                                        let combined: Vec<String> = pending
-                                            .iter()
-                                            .enumerate()
-                                            .map(|(i, m)| format!("{}. {}", i + 1, m.content))
-                                            .collect();
-                                        let combined_content = format!(
-                                            "[Queued messages while I was busy]\n\n{}",
-                                            combined.join("\n")
-                                        );
-                                        let synthetic = InboundMessage::new(
-                                            &msg_ref.channel,
-                                            &msg_ref.sender_id,
-                                            &msg_ref.chat_id,
-                                            &combined_content,
-                                        );
-                                        if let Err(e) = bus_ref.publish_inbound(synthetic).await {
-                                            error!("Failed to re-queue collected messages: {}", e);
-                                        }
-                                    }
-                                    crate::config::MessageQueueMode::Followup => {
-                                        // Replay each pending message as a separate inbound
-                                        for pending_msg in pending {
-                                            if let Err(e) = bus_ref.publish_inbound(pending_msg).await {
-                                                error!("Failed to re-queue followup message: {}", e);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }.instrument(request_span).await;
+                            self.process_inbound_message(msg_ref, usage_metrics).await;
+                        }
+                        .instrument(request_span)
+                        .await;
                     } else {
                         // Channel closed, exit loop
                         info!("Inbound channel closed");
@@ -1499,6 +1530,58 @@ mod tests {
         let err = result.unwrap_err();
         assert!(matches!(err, ZeptoError::Provider(_)));
         assert!(err.to_string().contains("No provider configured"));
+    }
+
+    #[tokio::test]
+    async fn test_session_lock_for_reuses_same_session_lock() {
+        let config = Config::default();
+        let session_manager = SessionManager::new_memory();
+        let bus = Arc::new(MessageBus::new());
+        let agent = AgentLoop::new(config, session_manager, bus);
+
+        let first = agent.session_lock_for("telegram:chat1").await;
+        let second = agent.session_lock_for("telegram:chat1").await;
+        let other = agent.session_lock_for("telegram:chat2").await;
+
+        assert!(Arc::ptr_eq(&first, &second));
+        assert!(!Arc::ptr_eq(&first, &other));
+    }
+
+    #[tokio::test]
+    async fn test_try_queue_or_process_returns_false_when_session_idle() {
+        let config = Config::default();
+        let session_manager = SessionManager::new_memory();
+        let bus = Arc::new(MessageBus::new());
+        let agent = AgentLoop::new(config, session_manager, bus);
+
+        let msg = InboundMessage::new("telegram", "user1", "chat1", "hello");
+        let queued = agent.try_queue_or_process(&msg).await;
+        assert!(!queued);
+
+        let pending = agent.pending_messages.lock().await;
+        assert!(pending.get(&msg.session_key).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_try_queue_or_process_queues_when_session_busy() {
+        let config = Config::default();
+        let session_manager = SessionManager::new_memory();
+        let bus = Arc::new(MessageBus::new());
+        let agent = AgentLoop::new(config, session_manager, bus);
+
+        let msg = InboundMessage::new("telegram", "user1", "chat1", "followup");
+        let session_lock = agent.session_lock_for(&msg.session_key).await;
+        let _guard = session_lock.lock().await;
+
+        let queued = agent.try_queue_or_process(&msg).await;
+        assert!(queued);
+
+        let pending = agent.pending_messages.lock().await;
+        let queued_msgs = pending
+            .get(&msg.session_key)
+            .expect("pending messages should contain queued message");
+        assert_eq!(queued_msgs.len(), 1);
+        assert_eq!(queued_msgs[0].content, msg.content);
     }
 
     #[tokio::test]

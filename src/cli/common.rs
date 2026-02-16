@@ -13,7 +13,10 @@ use zeptoclaw::bus::MessageBus;
 use zeptoclaw::config::templates::{AgentTemplate, TemplateRegistry};
 use zeptoclaw::config::{Config, MemoryBackend, MemoryCitationsMode};
 use zeptoclaw::cron::CronService;
-use zeptoclaw::providers::{resolve_runtime_provider, ClaudeProvider, OpenAIProvider};
+use zeptoclaw::providers::{
+    resolve_runtime_providers, ClaudeProvider, FallbackProvider, LLMProvider, OpenAIProvider,
+    RuntimeProviderSelection,
+};
 use zeptoclaw::runtime::{create_runtime, NativeRuntime};
 use zeptoclaw::session::SessionManager;
 use zeptoclaw::skills::SkillsLoader;
@@ -110,6 +113,60 @@ pub(crate) fn resolve_template(name: &str) -> Result<AgentTemplate> {
         name,
         available.join(", ")
     );
+}
+
+fn provider_from_runtime_selection(
+    selection: &RuntimeProviderSelection,
+) -> Option<Box<dyn LLMProvider>> {
+    match selection.backend {
+        "anthropic" => Some(Box::new(ClaudeProvider::new(&selection.api_key))),
+        "openai" => {
+            let provider = if let Some(base_url) = selection.api_base.as_deref() {
+                OpenAIProvider::with_base_url(&selection.api_key, base_url)
+            } else {
+                OpenAIProvider::new(&selection.api_key)
+            };
+            Some(Box::new(provider))
+        }
+        _ => None,
+    }
+}
+
+fn build_runtime_provider_chain(
+    config: &Config,
+) -> Option<(Box<dyn LLMProvider>, Vec<&'static str>)> {
+    let mut provider_names = Vec::new();
+    let mut providers: Vec<Box<dyn LLMProvider>> = Vec::new();
+
+    for selection in resolve_runtime_providers(config) {
+        if let Some(provider) = provider_from_runtime_selection(&selection) {
+            provider_names.push(selection.name);
+            providers.push(provider);
+        } else {
+            warn!(
+                provider = selection.name,
+                backend = selection.backend,
+                "Skipping runtime provider with unsupported backend"
+            );
+        }
+    }
+
+    let mut providers_iter = providers.into_iter();
+    let first = providers_iter.next()?;
+
+    // Only chain multiple providers when fallback is explicitly enabled.
+    // Without this gate, users who configure multiple API keys for different
+    // purposes (e.g. Anthropic for production, OpenAI for testing) would get
+    // unexpected automatic failover.
+    if !config.providers.fallback.enabled {
+        return Some((first, vec![provider_names[0]]));
+    }
+
+    let provider_chain = providers_iter.fold(first, |primary, fallback| {
+        Box::new(FallbackProvider::new(primary, fallback)) as Box<dyn LLMProvider>
+    });
+
+    Some((provider_chain, provider_names))
 }
 
 fn build_skills_prompt(config: &Config) -> String {
@@ -619,27 +676,22 @@ Enable runtime.allow_fallback_to_native to opt in to native fallback.",
 
     info!("Registered {} tools", agent.tool_count().await);
 
-    // Set up provider
-    if let Some(runtime_provider) = resolve_runtime_provider(&config) {
-        match runtime_provider.backend {
-            "anthropic" => {
-                let provider = ClaudeProvider::new(&runtime_provider.api_key);
-                agent.set_provider(Box::new(provider)).await;
-            }
-            "openai" => {
-                let provider = if let Some(base_url) = runtime_provider.api_base.as_deref() {
-                    OpenAIProvider::with_base_url(&runtime_provider.api_key, base_url)
-                } else {
-                    OpenAIProvider::new(&runtime_provider.api_key)
-                };
-                agent.set_provider(Box::new(provider)).await;
-            }
-            _ => {}
+    // Set up provider (supports multi-provider fallback chain in registry order)
+    if let Some((provider_chain, provider_names)) = build_runtime_provider_chain(&config) {
+        let chain_label = provider_names.join(" -> ");
+        let provider_count = provider_names.len();
+
+        agent.set_provider(provider_chain).await;
+
+        if provider_count > 1 {
+            info!(
+                provider_count = provider_count,
+                provider_chain = %chain_label,
+                "Configured runtime provider fallback chain"
+            );
+        } else {
+            info!("Configured runtime provider: {}", chain_label);
         }
-        info!(
-            "Configured runtime provider: {} (backend: {})",
-            runtime_provider.name, runtime_provider.backend
-        );
     }
 
     let unsupported = zeptoclaw::providers::configured_unsupported_provider_names(&config);
@@ -805,5 +857,70 @@ mod tests {
     fn test_friendly_api_error_unknown_status() {
         let msg = friendly_api_error("openai", 500, "");
         assert!(msg.contains("HTTP 500"));
+    }
+
+    #[test]
+    fn test_build_runtime_provider_chain_empty_when_no_provider() {
+        let config = Config::default();
+        assert!(build_runtime_provider_chain(&config).is_none());
+    }
+
+    #[test]
+    fn test_build_runtime_provider_chain_single_provider() {
+        let mut config = Config::default();
+        config.providers.openai = Some(zeptoclaw::config::ProviderConfig {
+            api_key: Some("sk-openai".to_string()),
+            ..Default::default()
+        });
+
+        let (provider, names) =
+            build_runtime_provider_chain(&config).expect("provider chain should resolve");
+        assert_eq!(names, vec!["openai"]);
+        assert_eq!(provider.name(), "openai");
+    }
+
+    #[test]
+    fn test_build_runtime_provider_chain_preserves_registry_order() {
+        let mut config = Config::default();
+        config.providers.anthropic = Some(zeptoclaw::config::ProviderConfig {
+            api_key: Some("sk-ant".to_string()),
+            ..Default::default()
+        });
+        config.providers.openai = Some(zeptoclaw::config::ProviderConfig {
+            api_key: Some("sk-openai".to_string()),
+            ..Default::default()
+        });
+        config.providers.groq = Some(zeptoclaw::config::ProviderConfig {
+            api_key: Some("gsk-test".to_string()),
+            ..Default::default()
+        });
+
+        let (provider, names) =
+            build_runtime_provider_chain(&config).expect("provider chain should resolve");
+        assert_eq!(names, vec!["anthropic", "openai", "groq"]);
+
+        let chain_name = provider.name();
+        assert_eq!(chain_name.matches("->").count(), 2);
+        assert!(chain_name.contains("openai"));
+    }
+
+    #[test]
+    fn test_build_runtime_provider_chain_no_chain_when_fallback_disabled() {
+        let mut config = Config::default();
+        config.providers.fallback.enabled = false;
+        config.providers.anthropic = Some(zeptoclaw::config::ProviderConfig {
+            api_key: Some("sk-ant".to_string()),
+            ..Default::default()
+        });
+        config.providers.openai = Some(zeptoclaw::config::ProviderConfig {
+            api_key: Some("sk-openai".to_string()),
+            ..Default::default()
+        });
+
+        let (provider, names) =
+            build_runtime_provider_chain(&config).expect("provider chain should resolve");
+        // Only the highest-priority provider is used
+        assert_eq!(names, vec!["anthropic"]);
+        assert_eq!(provider.name(), "claude");
     }
 }

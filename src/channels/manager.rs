@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{watch, RwLock};
+use tokio::sync::{watch, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
@@ -16,6 +16,8 @@ use crate::config::Config;
 use crate::error::Result;
 
 use super::Channel;
+
+type SharedChannel = Arc<Mutex<Box<dyn Channel>>>;
 
 /// The `ChannelManager` manages the lifecycle of all communication channels.
 ///
@@ -65,7 +67,7 @@ use super::Channel;
 /// ```
 pub struct ChannelManager {
     /// Map of channel name to channel instance
-    channels: Arc<RwLock<HashMap<String, Box<dyn Channel>>>>,
+    channels: Arc<RwLock<HashMap<String, SharedChannel>>>,
     /// Reference to the message bus for routing
     bus: Arc<MessageBus>,
     /// Global configuration
@@ -129,7 +131,7 @@ impl ChannelManager {
         let name = channel.name().to_string();
         info!("Registering channel: {}", name);
         let mut channels = self.channels.write().await;
-        channels.insert(name, channel);
+        channels.insert(name, Arc::new(Mutex::new(channel)));
     }
 
     /// Returns a list of all registered channel names.
@@ -205,14 +207,21 @@ impl ChannelManager {
             }
         }
 
-        let mut channels = self.channels.write().await;
-        for (name, channel) in channels.iter_mut() {
+        let channels_to_start = {
+            let channels = self.channels.read().await;
+            channels
+                .iter()
+                .map(|(name, channel)| (name.clone(), Arc::clone(channel)))
+                .collect::<Vec<_>>()
+        };
+
+        for (name, channel) in channels_to_start {
             info!("Starting channel: {}", name);
+            let mut channel = channel.lock().await;
             if let Err(e) = channel.start().await {
                 error!("Failed to start channel {}: {}", name, e);
             }
         }
-        drop(channels); // Release the write lock before spawning
 
         // Reset shutdown signal for fresh start
         let _ = self.shutdown_tx.send(false);
@@ -262,9 +271,17 @@ impl ChannelManager {
         }
 
         // Stop all channels
-        let mut channels = self.channels.write().await;
-        for (name, channel) in channels.iter_mut() {
+        let channels_to_stop = {
+            let channels = self.channels.read().await;
+            channels
+                .iter()
+                .map(|(name, channel)| (name.clone(), Arc::clone(channel)))
+                .collect::<Vec<_>>()
+        };
+
+        for (name, channel) in channels_to_stop {
             info!("Stopping channel: {}", name);
+            let mut channel = channel.lock().await;
             if let Err(e) = channel.stop().await {
                 error!("Failed to stop channel {}: {}", name, e);
             }
@@ -291,8 +308,13 @@ impl ChannelManager {
     /// manager.send("telegram", msg).await?;
     /// ```
     pub async fn send(&self, channel_name: &str, msg: OutboundMessage) -> Result<()> {
-        let channels = self.channels.read().await;
-        if let Some(channel) = channels.get(channel_name) {
+        let channel = {
+            let channels = self.channels.read().await;
+            channels.get(channel_name).cloned()
+        };
+
+        if let Some(channel) = channel {
+            let channel = channel.lock().await;
             channel.send(msg).await
         } else {
             warn!("Channel not found: {}", channel_name);
@@ -319,7 +341,7 @@ impl ChannelManager {
 /// * `shutdown_rx` - Receiver for shutdown signals
 async fn dispatch_outbound(
     bus: Arc<MessageBus>,
-    channels: Arc<RwLock<HashMap<String, Box<dyn Channel>>>>,
+    channels: Arc<RwLock<HashMap<String, SharedChannel>>>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
     info!("Outbound dispatcher started");
@@ -336,9 +358,14 @@ async fn dispatch_outbound(
             msg = bus.consume_outbound() => {
                 if let Some(msg) = msg {
                     let channel_name = msg.channel.clone();
-                    let channels = channels.read().await;
-                    if let Some(channel) = channels.get(&channel_name) {
-                        if let Err(e) = channel.send(msg.clone()).await {
+                    let channel = {
+                        let channels = channels.read().await;
+                        channels.get(&channel_name).cloned()
+                    };
+
+                    if let Some(channel) = channel {
+                        let channel = channel.lock().await;
+                        if let Err(e) = channel.send(msg).await {
                             error!("Failed to send message to {}: {}", channel_name, e);
                         }
                     } else {
