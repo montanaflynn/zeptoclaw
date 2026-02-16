@@ -120,7 +120,13 @@ src/
 │   └── manager.rs  # DepManager lifecycle orchestrator
 ├── gateway/        # Containerized agent proxy (Docker/Apple)
 ├── heartbeat/      # Periodic background task service
-├── memory/         # Workspace memory (markdown search) + long-term memory
+├── memory/         # Workspace memory + long-term memory with pluggable search backends
+│   ├── traits.rs         # MemorySearcher + MemoryStore traits
+│   ├── builtin_searcher.rs # Default substring scorer (always compiled)
+│   ├── bm25_searcher.rs  # BM25 keyword scorer (feature: memory-bm25)
+│   ├── factory.rs        # create_searcher() factory from config
+│   ├── longterm.rs       # Persistent KV store with pluggable searcher
+│   └── mod.rs            # Workspace markdown search with pluggable searcher
 ├── providers/      # LLM providers (Claude, OpenAI, Retry, Fallback)
 ├── runtime/        # Container runtimes (Native, Docker, Apple)
 ├── routines/       # Event/webhook/cron triggered automations
@@ -238,8 +244,12 @@ Message input channels via `Channel` trait:
 - `start()` now routes inbound work through `process_inbound_message()` helper and calls `try_queue_or_process()` before processing
 
 ### Memory (`src/memory/`)
-- Workspace memory - Markdown search/read with chunked scoring
-- `LongTermMemory` - Persistent key-value store at `~/.zeptoclaw/memory/longterm.json` with categories, tags, access tracking
+- `MemorySearcher` trait - Pluggable search/scoring backend (builtin, bm25, embedding, hnsw, tantivy)
+- `BuiltinSearcher` - Default substring + term-frequency scorer (always compiled, zero deps)
+- `Bm25Searcher` - Okapi BM25 keyword scorer (feature-gated: `memory-bm25`, zero deps)
+- `create_searcher()` - Factory maps `MemoryBackend` config to `Arc<dyn MemorySearcher>`
+- Workspace memory - Markdown search/read with pluggable searcher injection
+- `LongTermMemory` - Persistent key-value store at `~/.zeptoclaw/memory/longterm.json` with pluggable searcher, categories, tags, access tracking
 - `decay_score()` on `MemoryEntry` - 30-day half-life decay with importance weighting; pinned entries exempt (always 1.0)
 - `build_memory_injection()` - Pinned + query-matched memory injection for system prompt (2000 char budget)
 - Pre-compaction memory flush - Silent LLM turn saves important facts before context compaction (10s timeout)
@@ -309,6 +319,24 @@ Environment variables override config:
 - `ZEPTOCLAW_HEARTBEAT_DELIVER_TO` — channel for heartbeat result delivery (default: none)
 - `ZEPTOCLAW_MASTER_KEY` — hex-encoded 32-byte master encryption key for secret encryption
 - `ZEPTOCLAW_TUNNEL_PROVIDER` — tunnel provider (cloudflare, ngrok, tailscale, auto)
+- `ZEPTOCLAW_MEMORY_BACKEND` — memory search backend: builtin (default), bm25, embedding, hnsw, tantivy, none
+- `ZEPTOCLAW_MEMORY_EMBEDDING_PROVIDER` — embedding provider name (for embedding backend)
+- `ZEPTOCLAW_MEMORY_EMBEDDING_MODEL` — embedding model name (for embedding backend)
+
+### Cargo Features
+
+```bash
+# Default build (builtin memory searcher only)
+cargo build --release
+
+# With BM25 keyword scoring
+cargo build --release --features memory-bm25
+
+# Future features (not yet implemented)
+# cargo build --release --features memory-embedding
+# cargo build --release --features memory-hnsw
+# cargo build --release --features memory-tantivy
+```
 
 ### Compile-time Configuration
 
