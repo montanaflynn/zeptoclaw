@@ -201,6 +201,18 @@ pub(crate) async fn cmd_gateway(
     // Create channel manager
     let channel_manager = ChannelManager::new(bus.clone(), config.clone());
 
+    // Install and start channel dependencies (if any)
+    let deps_dir = DepManager::default_dir();
+    let dep_mgr = DepManager::new(deps_dir, Arc::new(RealFetcher));
+    let deps = collect_enabled_channel_deps(&config);
+
+    if !deps.is_empty() {
+        info!("Installing {} channel dependencies...", deps.len());
+        for dep in &deps {
+            install_and_start_dep(&dep_mgr, dep).await;
+        }
+    }
+
     // Register channels via factory.
     let channel_count = register_configured_channels(&channel_manager, bus.clone(), &config).await;
     if channel_count == 0 {
