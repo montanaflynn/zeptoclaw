@@ -183,24 +183,43 @@ fn parse_callback_params(path: &str) -> Result<CallbackResult> {
 
 /// Minimal URL decoding (percent-encoded characters).
 fn urldecode(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            let hex: String = chars.by_ref().take(2).collect();
-            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                result.push(byte as char);
-            } else {
-                result.push('%');
-                result.push_str(&hex);
+    // Decode into raw bytes first so multi-byte UTF-8 percent-encodings roundtrip correctly.
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' => {
+                if i + 2 < bytes.len() {
+                    let h1 = bytes[i + 1];
+                    let h2 = bytes[i + 2];
+                    let hex = [h1, h2];
+                    if let Ok(hex_str) = std::str::from_utf8(&hex) {
+                        if let Ok(byte) = u8::from_str_radix(hex_str, 16) {
+                            out.push(byte);
+                            i += 3;
+                            continue;
+                        }
+                    }
+                    out.push(b'%');
+                    i += 1;
+                } else {
+                    out.push(b'%');
+                    i += 1;
+                }
             }
-        } else if c == '+' {
-            result.push(' ');
-        } else {
-            result.push(c);
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
         }
     }
-    result
+
+    String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
 }
 
 // ============================================================================
@@ -344,8 +363,12 @@ pub fn open_browser(url: &str) -> Result<()> {
 
     #[cfg(target_os = "windows")]
     {
+        // Use an empty title argument and quote the URL so cmd.exe doesn't treat characters like '&'
+        // as command separators.
+        let url = url.replace('"', "\\\"");
+        let cmd = format!("start \"\" \"{}\"", url);
         std::process::Command::new("cmd")
-            .args(["/C", "start", url])
+            .args(["/C", &cmd])
             .spawn()
             .map_err(|e| ZeptoError::Config(format!("Failed to open browser: {}", e)))?;
     }
@@ -551,6 +574,7 @@ mod tests {
         assert_eq!(urldecode("hello%20world"), "hello world");
         assert_eq!(urldecode("hello+world"), "hello world");
         assert_eq!(urldecode("a%3Db"), "a=b");
+        assert_eq!(urldecode("%E2%9C%93"), "\u{2713}");
     }
 
     #[test]

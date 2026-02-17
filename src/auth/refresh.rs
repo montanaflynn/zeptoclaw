@@ -5,6 +5,9 @@
 
 use tracing::{info, warn};
 
+use std::future::Future;
+use std::pin::Pin;
+
 use crate::error::{Result, ZeptoError};
 
 use super::store::TokenStore;
@@ -22,6 +25,24 @@ const REFRESH_BUFFER_SECS: i64 = 300; // 5 minutes
 ///
 /// Returns `Err` if the token is expired and cannot be refreshed.
 pub async fn ensure_fresh_token(store: &TokenStore, provider: &str) -> Result<String> {
+    ensure_fresh_token_with(store, provider, |token_url, refresh_token, client_id| {
+        Box::pin(refresh_access_token(token_url, refresh_token, client_id))
+    })
+    .await
+}
+
+async fn ensure_fresh_token_with<F>(
+    store: &TokenStore,
+    provider: &str,
+    refresh_fn: F,
+) -> Result<String>
+where
+    F: for<'a> Fn(
+        &'a str,
+        &'a str,
+        &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<RefreshedTokens>> + 'a>>,
+{
     let token = store
         .load(provider)?
         .ok_or_else(|| ZeptoError::Config(format!("No OAuth token stored for '{}'", provider)))?;
@@ -44,7 +65,12 @@ pub async fn ensure_fresh_token(store: &TokenStore, provider: &str) -> Result<St
         ))
     })?;
 
-    let client_id = token.client_id.as_deref().unwrap_or("zeptoclaw");
+    let client_id = token.client_id.as_deref().ok_or_else(|| {
+        ZeptoError::Config(format!(
+            "OAuth token for '{}' is missing client_id; re-authenticate to store a valid client id",
+            provider
+        ))
+    })?;
 
     let token_url = super::provider_oauth_config(provider)
         .map(|c| c.token_url)
@@ -63,7 +89,7 @@ pub async fn ensure_fresh_token(store: &TokenStore, provider: &str) -> Result<St
         )));
     }
 
-    match refresh_access_token(&token_url, refresh_token, client_id).await {
+    match refresh_fn(&token_url, refresh_token, client_id).await {
         Ok(new_tokens) => {
             // Build updated token set
             let updated = OAuthTokenSet {
@@ -176,10 +202,141 @@ async fn refresh_access_token(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::security::encryption::SecretEncryption;
+    use tempfile::TempDir;
+
+    fn test_store() -> (TokenStore, TempDir) {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("tokens.json.enc");
+        (
+            TokenStore::with_path(path, SecretEncryption::from_raw_key(&[0x42u8; 32])),
+            tmp,
+        )
+    }
+
+    fn token_set(provider: &str, expires_at: i64) -> OAuthTokenSet {
+        OAuthTokenSet {
+            provider: provider.to_string(),
+            access_token: "old-access-token".to_string(),
+            refresh_token: Some("refresh-token".to_string()),
+            expires_at: Some(expires_at),
+            token_type: "Bearer".to_string(),
+            scope: None,
+            obtained_at: chrono::Utc::now().timestamp(),
+            client_id: Some("registered-client-id".to_string()),
+        }
+    }
 
     #[test]
     fn test_refresh_buffer_secs() {
         // Ensure the refresh buffer is reasonable (5 minutes)
         assert_eq!(REFRESH_BUFFER_SECS, 300);
+    }
+
+    #[tokio::test]
+    async fn test_ensure_fresh_token_skips_refresh_when_valid() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let (store, _tmp) = test_store();
+        let now = chrono::Utc::now().timestamp();
+        store.save(&token_set("anthropic", now + 3600)).unwrap();
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls2 = Arc::clone(&calls);
+
+        let token = ensure_fresh_token_with(&store, "anthropic", move |_, _, _| {
+            calls2.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Err(ZeptoError::Config("should not be called".into())) })
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(token, "old-access-token");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_ensure_fresh_token_refresh_failure_uses_old_when_not_expired() {
+        let (store, _tmp) = test_store();
+        let now = chrono::Utc::now().timestamp();
+        store.save(&token_set("anthropic", now + 10)).unwrap(); // expiring soon, not expired
+
+        let token = ensure_fresh_token_with(&store, "anthropic", |_, _, _| {
+            Box::pin(async { Err(ZeptoError::Config("refresh failed".into())) })
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(token, "old-access-token");
+    }
+
+    #[tokio::test]
+    async fn test_ensure_fresh_token_refresh_failure_errors_when_expired() {
+        let (store, _tmp) = test_store();
+        let now = chrono::Utc::now().timestamp();
+        store.save(&token_set("anthropic", now - 10)).unwrap(); // expired
+
+        let err = ensure_fresh_token_with(&store, "anthropic", |_, _, _| {
+            Box::pin(async { Err(ZeptoError::Config("refresh failed".into())) })
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("expired"));
+        assert!(err.contains("refresh failed"));
+    }
+
+    #[tokio::test]
+    async fn test_ensure_fresh_token_refresh_success_updates_store() {
+        let (store, _tmp) = test_store();
+        let now = chrono::Utc::now().timestamp();
+        store.save(&token_set("anthropic", now + 10)).unwrap();
+
+        let token = ensure_fresh_token_with(&store, "anthropic", |_, _, _| {
+            Box::pin(async move {
+                Ok(RefreshedTokens {
+                    access_token: "new-access-token".to_string(),
+                    refresh_token: None,
+                    expires_at: Some(now + 7200),
+                    token_type: "Bearer".to_string(),
+                    scope: None,
+                })
+            })
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(token, "new-access-token");
+
+        let stored = store.load("anthropic").unwrap().unwrap();
+        assert_eq!(stored.access_token, "new-access-token");
+    }
+
+    #[tokio::test]
+    async fn test_ensure_fresh_token_missing_refresh_token_errors() {
+        let (store, _tmp) = test_store();
+        let now = chrono::Utc::now().timestamp();
+        let mut token = token_set("anthropic", now + 10);
+        token.refresh_token = None;
+        store.save(&token).unwrap();
+
+        let err = ensure_fresh_token_with(&store, "anthropic", |_, _, _| {
+            Box::pin(async {
+                Ok(RefreshedTokens {
+                    access_token: "new".to_string(),
+                    refresh_token: None,
+                    expires_at: None,
+                    token_type: "Bearer".to_string(),
+                    scope: None,
+                })
+            })
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+        assert!(err.contains("no refresh token"));
     }
 }

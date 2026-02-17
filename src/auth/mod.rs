@@ -51,7 +51,7 @@ impl AuthMethod {
 ///
 /// This is the output of the credential resolution process that considers
 /// OAuth tokens, API keys, and the configured auth method.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolvedCredential {
     /// Traditional API key.
     ApiKey(String),
@@ -168,6 +168,10 @@ pub struct ProviderOAuthConfig {
 }
 
 /// Returns the OAuth configuration for a supported provider.
+///
+/// Note: Some providers may not have a publicly available OAuth flow for API
+/// access yet. If a provider's OAuth endpoints or behavior change upstream,
+/// `auth login` may fail and users should fall back to API key authentication.
 pub fn provider_oauth_config(provider: &str) -> Option<ProviderOAuthConfig> {
     match provider {
         "anthropic" => Some(ProviderOAuthConfig {

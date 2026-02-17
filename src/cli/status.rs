@@ -60,10 +60,32 @@ async fn cmd_auth_login(provider: Option<String>) -> Result<()> {
     println!("at any time. If blocked, ZeptoClaw will fall back to your API key.");
     println!();
 
-    // Use a simple client ID (dynamic registration would be better but more complex)
-    let client_id = "zeptoclaw";
+    let provider_env = format!(
+        "ZEPTOCLAW_PROVIDERS_{}_OAUTH_CLIENT_ID",
+        provider.to_uppercase()
+    );
+    let client_id = std::env::var(&provider_env)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            std::env::var("ZEPTOCLAW_OAUTH_CLIENT_ID")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "OAuth client_id is required for '{}'.\n\
+                 Set a registered client id via:\n\
+                   export {}=your-client-id\n\
+                 or:\n\
+                   export ZEPTOCLAW_OAUTH_CLIENT_ID=your-client-id\n\n\
+                 Note: Anthropic OAuth endpoints/flow may not be publicly available yet.",
+                provider,
+                provider_env
+            )
+        })?;
 
-    let tokens = auth::oauth::run_oauth_flow(&oauth_config, client_id).await?;
+    let tokens = auth::oauth::run_oauth_flow(&oauth_config, &client_id).await?;
 
     // Store the tokens
     let encryption = zeptoclaw::security::encryption::resolve_master_key(true)

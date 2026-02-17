@@ -29,6 +29,7 @@
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::error::{Result, ZeptoError};
 use crate::session::{Message, Role, ToolCall};
@@ -121,19 +122,25 @@ impl ClaudeProvider {
         let mut headers = reqwest::header::HeaderMap::new();
         match &self.credential {
             crate::auth::ResolvedCredential::ApiKey(key) => {
-                headers.insert(
-                    "x-api-key",
-                    reqwest::header::HeaderValue::from_str(key)
-                        .unwrap_or_else(|_| reqwest::header::HeaderValue::from_static("")),
-                );
+                match reqwest::header::HeaderValue::from_str(key) {
+                    Ok(v) => {
+                        headers.insert("x-api-key", v);
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Invalid API key header value; omitting header");
+                    }
+                }
             }
             crate::auth::ResolvedCredential::BearerToken { access_token, .. } => {
                 let value = format!("Bearer {}", access_token);
-                headers.insert(
-                    reqwest::header::AUTHORIZATION,
-                    reqwest::header::HeaderValue::from_str(&value)
-                        .unwrap_or_else(|_| reqwest::header::HeaderValue::from_static("")),
-                );
+                match reqwest::header::HeaderValue::from_str(&value) {
+                    Ok(v) => {
+                        headers.insert(reqwest::header::AUTHORIZATION, v);
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Invalid Authorization header value; omitting header");
+                    }
+                }
             }
         }
         headers

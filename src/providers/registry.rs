@@ -22,7 +22,7 @@ pub struct ProviderSpec {
 }
 
 /// Runtime-ready provider selection.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeProviderSelection {
     /// Selected provider id.
     pub name: &'static str,
