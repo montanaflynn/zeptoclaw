@@ -83,13 +83,12 @@ impl AndroidTool {
             .await
             .map_err(|e| ZeptoError::Tool(format!("UI dump failed: {}", e)))?;
 
-        // Strip the "UI hierchary dumped to:" line if present
-        let xml = dump
-            .lines()
-            .find(|l| {
-                l.trim_start().starts_with("<?xml") || l.trim_start().starts_with("<hierarchy")
-            })
-            .unwrap_or(&dump);
+        // Strip the "UI hierchary dumped to:" line if present, but keep the full XML payload
+        let xml_start = dump.find("<?xml").or_else(|| dump.find("<hierarchy"));
+        let xml = match xml_start {
+            Some(idx) => &dump[idx..],
+            None => &dump,
+        };
 
         // Parse XML
         let elements = screen::parse_ui_dump(xml)?;
@@ -107,7 +106,10 @@ impl AndroidTool {
 
         // Run stuck detection on the processed elements
         let alerts = {
-            let mut detector = self.stuck.lock().unwrap();
+            let mut detector = self
+                .stuck
+                .lock()
+                .map_err(|e| ZeptoError::Tool(format!("StuckDetector mutex poisoned: {}", e)))?;
             detector.observe_screen(&processed)
         };
 
@@ -118,15 +120,19 @@ impl AndroidTool {
             elements: processed,
         };
 
-        // Serialize
-        let mut output = serde_json::to_string(&state)
+        // Serialize to JSON value so we can optionally attach alerts
+        let mut screen_value = serde_json::to_value(&state)
             .map_err(|e| ZeptoError::Tool(format!("Serialization failed: {}", e)))?;
 
-        // Append alerts if any
+        // Attach alerts as a JSON field if any are present
         if !alerts.is_empty() {
-            let alerts_json = serde_json::to_string(&alerts).unwrap_or_default();
-            output = format!("{}\n\n⚠ ALERTS: {}", output, alerts_json);
+            if let Value::Object(ref mut obj) = screen_value {
+                obj.insert("alerts".to_string(), json!(alerts));
+            }
         }
+
+        let output = serde_json::to_string(&screen_value)
+            .map_err(|e| ZeptoError::Tool(format!("Serialization failed: {}", e)))?;
 
         Ok(output)
     }
@@ -135,7 +141,10 @@ impl AndroidTool {
     async fn dispatch_action(&self, action: &str, args: &Value) -> Result<String> {
         // Record action for stuck detection
         {
-            let mut detector = self.stuck.lock().unwrap();
+            let mut detector = self
+                .stuck
+                .lock()
+                .map_err(|e| ZeptoError::Tool(format!("StuckDetector mutex poisoned: {}", e)))?;
             let alerts = detector.observe_action(action);
             if !alerts.is_empty() {
                 let alerts_json = serde_json::to_string(&alerts).unwrap_or_default();

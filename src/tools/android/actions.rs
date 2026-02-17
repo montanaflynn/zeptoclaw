@@ -185,7 +185,7 @@ pub async fn scroll(
 /// Type text (with escaping).
 pub async fn type_text(adb: &AdbExecutor, text: &str) -> Result<String> {
     let escaped = escape_adb_text(text);
-    adb.shell(&format!("input text '{}'", escaped)).await?;
+    adb.shell(&format!("input text {}", escaped)).await?;
     Ok(format!("Typed {} characters", text.len()))
 }
 
@@ -233,11 +233,8 @@ pub async fn key_event(adb: &AdbExecutor, key: &str) -> Result<String> {
 /// Set clipboard text.
 pub async fn set_clipboard(adb: &AdbExecutor, text: &str) -> Result<String> {
     let escaped = escape_adb_text(text);
-    adb.shell(&format!(
-        "am broadcast -a clipper.set -e text '{}'",
-        escaped
-    ))
-    .await?;
+    adb.shell(&format!("am broadcast -a clipper.set -e text {}", escaped))
+        .await?;
     Ok("Clipboard set".into())
 }
 
@@ -279,9 +276,10 @@ pub async fn launch_app(adb: &AdbExecutor, package: &str) -> Result<String> {
 
 /// Open a URL in the default browser.
 pub async fn open_url(adb: &AdbExecutor, url: &str) -> Result<String> {
+    let escaped = escape_adb_text(url);
     adb.shell(&format!(
-        "am start -a android.intent.action.VIEW -d '{}'",
-        url
+        "am start -a android.intent.action.VIEW -d {}",
+        escaped
     ))
     .await?;
     Ok(format!("Opened URL: {}", url))
@@ -301,15 +299,15 @@ pub async fn open_quick_settings(adb: &AdbExecutor) -> Result<String> {
 
 /// Take a screenshot and return as base64 PNG.
 pub async fn screenshot_base64(adb: &AdbExecutor) -> Result<String> {
+    // Use device-side base64 to avoid corrupting binary PNG bytes by decoding
+    // them as UTF-8 on the host. The output of this command is ASCII/base64
+    // text, which is safe to handle as a String.
     let output = adb
-        .run(&["exec-out", "screencap", "-p"])
+        .shell("screencap -p | base64")
         .await
         .map_err(|e| ZeptoError::Tool(format!("Screenshot failed: {}", e)))?;
-    let encoded = base64::Engine::encode(
-        &base64::engine::general_purpose::STANDARD,
-        output.as_bytes(),
-    );
-    Ok(encoded)
+    // Trim trailing newlines that base64 may add.
+    Ok(output.trim_end().to_string())
 }
 
 /// Wake up the screen.
