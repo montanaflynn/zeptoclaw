@@ -656,6 +656,11 @@ impl Config {
                 self.routines.max_concurrent = v.clamp(1, 100);
             }
         }
+        if let Ok(val) = std::env::var("ZEPTOCLAW_ROUTINES_JITTER_MS") {
+            if let Ok(v) = val.parse::<u64>() {
+                self.routines.jitter_ms = v;
+            }
+        }
     }
 
     /// Save configuration to the default path
