@@ -132,6 +132,44 @@ fn cli_skills_show_nonexistent() {
     );
 }
 
+#[test]
+fn cli_skills_hub_help() {
+    let (code, stdout, _stderr) = run_cli(&["skills", "hub", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("search"));
+    assert!(stdout.contains("install"));
+}
+
+#[test]
+fn cli_skills_hub_install_help() {
+    let (code, stdout, _stderr) = run_cli(&["skills", "hub", "install", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("slug"));
+    assert!(stdout.contains("--yes"));
+}
+
+#[test]
+fn cli_skills_hub_update_help() {
+    let (code, stdout, _stderr) = run_cli(&["skills", "hub", "update", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("--all"));
+    assert!(stdout.contains("--force"));
+}
+
+#[test]
+fn cli_skills_hub_sync_help() {
+    let (code, stdout, _stderr) = run_cli(&["skills", "hub", "sync", "--help"]);
+    assert_eq!(code, 0);
+    assert!(stdout.contains("--execute"));
+    assert!(!stdout.contains("--dry-run"));
+}
+
+#[test]
+fn cli_skills_hub_list() {
+    let (code, _stdout, _stderr) = run_cli(&["skills", "hub", "list"]);
+    assert_eq!(code, 0);
+}
+
 // ============================================================================
 // History
 // ============================================================================

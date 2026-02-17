@@ -105,6 +105,13 @@ zeptoclaw batch --input prompts.txt --output results.jsonl
 # Start as a Telegram/Slack/Discord/Webhook gateway
 zeptoclaw gateway
 
+# Discover and install skills from ClawHub
+zeptoclaw skills hub search "calendar"
+zeptoclaw skills hub inspect <slug>
+zeptoclaw skills hub install <slug> --yes
+zeptoclaw skills hub update --all
+zeptoclaw skills hub sync --execute --yes
+
 # With full container isolation per request
 zeptoclaw gateway --containerized
 ```
@@ -133,8 +140,16 @@ The migration command:
 - Backs up your existing ZeptoClaw config before overwriting
 - Validates the migrated config and reports any issues
 - Lists features that can't be automatically ported
+- For existing local skills, publish to ClawHub with `zeptoclaw skills hub sync` (dry-run by default)
 
 Supports JSON and JSON5 config files (comments, trailing commas, unquoted keys).
+
+### ClawHub environment overrides
+
+- `ZEPTOCLAW_CLAWHUB_REGISTRY` — ClawHub API base URL
+- `ZEPTOCLAW_CLAWHUB_SITE` — ClawHub site URL for auth/display flows
+- `ZEPTOCLAW_CLAWHUB_TOKEN` — token override for `skills hub` commands
+- `ZEPTOCLAW_MASTER_KEY` — when set, `skills hub login` stores token encrypted at rest
 
 ## Deploy
 

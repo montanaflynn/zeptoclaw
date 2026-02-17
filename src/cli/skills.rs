@@ -9,11 +9,11 @@ use super::SkillsAction;
 
 /// Skills management command.
 pub(crate) async fn cmd_skills(action: SkillsAction) -> Result<()> {
-    let config = Config::load().with_context(|| "Failed to load configuration")?;
-    let loader = skills_loader_from_config(&config);
-
     match action {
+        SkillsAction::Hub { action } => super::skills_hub::cmd_skills_hub(action).await,
         SkillsAction::List { all } => {
+            let config = Config::load().with_context(|| "Failed to load configuration")?;
+            let loader = skills_loader_from_config(&config);
             let disabled: std::collections::HashSet<String> = config
                 .skills
                 .disabled
@@ -41,8 +41,11 @@ pub(crate) async fn cmd_skills(action: SkillsAction) -> Result<()> {
                 };
                 println!("  - {} ({}, {})", info.name, info.source, marker);
             }
+            Ok(())
         }
         SkillsAction::Show { name } => {
+            let config = Config::load().with_context(|| "Failed to load configuration")?;
+            let loader = skills_loader_from_config(&config);
             if let Some(skill) = loader.load_skill(&name) {
                 println!("Name: {}", skill.name);
                 println!("Description: {}", skill.description);
@@ -53,8 +56,11 @@ pub(crate) async fn cmd_skills(action: SkillsAction) -> Result<()> {
             } else {
                 anyhow::bail!("Skill '{}' not found", name);
             }
+            Ok(())
         }
         SkillsAction::Create { name } => {
+            let config = Config::load().with_context(|| "Failed to load configuration")?;
+            let loader = skills_loader_from_config(&config);
             let dir = loader.workspace_dir().join(&name);
             let skill_file = dir.join("SKILL.md");
             if skill_file.exists() {
@@ -76,8 +82,7 @@ Describe usage and concrete command examples.
             );
             std::fs::write(&skill_file, template)?;
             println!("Created skill at {:?}", skill_file);
+            Ok(())
         }
     }
-
-    Ok(())
 }
