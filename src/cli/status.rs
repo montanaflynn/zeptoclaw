@@ -122,7 +122,11 @@ fn cmd_auth_logout(provider: Option<String>) -> Result<()> {
         Ok(enc) => enc,
         Err(_) => {
             println!("No encryption key available. If you have stored tokens,");
-            println!("delete them manually: rm ~/.zeptoclaw/auth/tokens.json.enc");
+            let path = Config::dir().join("auth").join("tokens.json.enc");
+            #[cfg(windows)]
+            println!("delete them manually: del {}", path.display());
+            #[cfg(not(windows))]
+            println!("delete them manually: rm {}", path.display());
             return Ok(());
         }
     };
@@ -178,8 +182,8 @@ async fn cmd_auth_refresh(provider: &str) -> Result<()> {
 
     match auth::refresh::ensure_fresh_token(&store, provider).await {
         Ok(_) => {
-            println!("Token refreshed for {}.", provider);
-            println!("New token stored securely.");
+            println!("Token checked for {}.", provider);
+            println!("If a refresh was needed and succeeded, the new token is stored securely.");
         }
         Err(e) => {
             println!("Failed to refresh token for {}: {}", provider, e);
@@ -200,24 +204,35 @@ async fn cmd_auth_status() -> Result<()> {
     println!();
 
     // Load OAuth token store (best-effort)
-    let token_store = zeptoclaw::security::encryption::resolve_master_key(false)
-        .ok()
-        .map(auth::store::TokenStore::new);
+    let token_store = match zeptoclaw::security::encryption::resolve_master_key(false) {
+        Ok(enc) => Ok(auth::store::TokenStore::new(enc)),
+        Err(err) => {
+            println!("OAuth token store unavailable: {}", err);
+            println!();
+            Err(err)
+        }
+    };
 
     let oauth_status = |name: &str| -> String {
-        if let Some(ref store) = token_store {
-            if let Ok(Some(token)) = store.load(name) {
-                if token.is_expired() {
-                    return format!(
-                        "OAuth (expired{})",
-                        if token.refresh_token.is_some() {
-                            ", has refresh token"
-                        } else {
-                            ""
-                        }
-                    );
+        if let Ok(ref store) = token_store {
+            match store.load(name) {
+                Ok(Some(token)) => {
+                    if token.is_expired() {
+                        return format!(
+                            "OAuth (expired{})",
+                            if token.refresh_token.is_some() {
+                                ", has refresh token"
+                            } else {
+                                ""
+                            }
+                        );
+                    }
+                    return format!("OAuth (expires in {})", token.expires_in_human());
                 }
-                return format!("OAuth (expires in {})", token.expires_in_human());
+                Ok(None) => {}
+                Err(err) => {
+                    return format!("OAuth (error: {})", err);
+                }
             }
         }
         String::new()

@@ -167,7 +167,6 @@ pub fn resolve_runtime_providers(config: &Config) -> Vec<RuntimeProviderSelectio
     let mut resolved = Vec::new();
 
     // Try to load the token store for OAuth resolution.
-    // Use a fixed key for now; in production this would use resolve_master_key().
     let token_store = crate::security::encryption::resolve_master_key(false)
         .ok()
         .map(crate::auth::store::TokenStore::new);
@@ -228,18 +227,13 @@ fn resolve_credential(
         }
         AuthMethod::OAuth => {
             // Only use OAuth token
-            if let Some(token) = try_load_oauth_token(provider_name, token_store) {
-                let key_str = token.value().to_string();
-                Some((token, key_str))
-            } else {
-                None
-            }
+            try_load_oauth_token(provider_name, token_store)
+                .map(|token| (token, api_key.unwrap_or("").to_string()))
         }
         AuthMethod::Auto => {
             // Try OAuth first, fall back to API key
             if let Some(token) = try_load_oauth_token(provider_name, token_store) {
-                let key_str = token.value().to_string();
-                Some((token, key_str))
+                Some((token, api_key.unwrap_or("").to_string()))
             } else {
                 api_key.map(|key| (ResolvedCredential::ApiKey(key.to_string()), key.to_string()))
             }
@@ -255,7 +249,7 @@ fn try_load_oauth_token(
     let store = token_store?;
     let token_set = store.load(provider_name).ok()??;
 
-    // Expired tokens are ignored here; refresh is handled before provider setup.
+    // Expired tokens are ignored here; callers may refresh separately (the CLI does this on startup).
     if token_set.is_expired() {
         return None;
     }

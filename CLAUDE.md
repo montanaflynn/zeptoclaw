@@ -341,7 +341,7 @@ cargo build --release
 ## Testing
 
 ```bash
-# Unit tests (1657 tests)
+# Unit tests (1658 tests)
 cargo test --lib
 
 # Main binary tests (54 tests)

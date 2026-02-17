@@ -14,7 +14,7 @@ use super::store::TokenStore;
 use super::OAuthTokenSet;
 
 /// Seconds before expiry to trigger a proactive refresh.
-const REFRESH_BUFFER_SECS: i64 = 300; // 5 minutes
+pub const REFRESH_BUFFER_SECS: i64 = 300; // 5 minutes
 
 /// Ensure the stored token for a provider is fresh.
 ///
@@ -58,19 +58,39 @@ where
         "OAuth token expiring soon, attempting refresh"
     );
 
-    let refresh_token = token.refresh_token.as_deref().ok_or_else(|| {
-        ZeptoError::Config(format!(
-            "OAuth token for '{}' is expired and no refresh token is available",
-            provider
-        ))
-    })?;
+    let refresh_token = match token.refresh_token.as_deref() {
+        Some(v) => v,
+        None => {
+            if token.is_expired() {
+                return Err(ZeptoError::Config(format!(
+                    "OAuth token for '{}' is expired and no refresh token is available",
+                    provider
+                )));
+            }
+            warn!(
+                provider = provider,
+                "OAuth token is expiring soon but no refresh token is available; using existing token"
+            );
+            return Ok(token.access_token);
+        }
+    };
 
-    let client_id = token.client_id.as_deref().ok_or_else(|| {
-        ZeptoError::Config(format!(
-            "OAuth token for '{}' is missing client_id; re-authenticate to store a valid client id",
-            provider
-        ))
-    })?;
+    let client_id = match token.client_id.as_deref() {
+        Some(v) => v,
+        None => {
+            if token.is_expired() {
+                return Err(ZeptoError::Config(format!(
+                    "OAuth token for '{}' is expired and missing client_id; re-authenticate to store a valid client id",
+                    provider
+                )));
+            }
+            warn!(
+                provider = provider,
+                "OAuth token is expiring soon but client_id is missing; using existing token"
+            );
+            return Ok(token.access_token);
+        }
+    };
 
     let token_url = super::provider_oauth_config(provider)
         .map(|c| c.token_url)
@@ -83,10 +103,17 @@ where
         });
 
     if token_url.is_empty() {
-        return Err(ZeptoError::Config(format!(
-            "Cannot refresh OAuth token for '{}': unknown token endpoint",
-            provider
-        )));
+        if token.is_expired() {
+            return Err(ZeptoError::Config(format!(
+                "Cannot refresh OAuth token for '{}': unknown token endpoint",
+                provider
+            )));
+        }
+        warn!(
+            provider = provider,
+            "OAuth token is expiring soon but token endpoint is unknown; using existing token"
+        );
+        return Ok(token.access_token);
     }
 
     match refresh_fn(&token_url, refresh_token, client_id).await {
@@ -334,9 +361,27 @@ mod tests {
             })
         })
         .await
+        .unwrap();
+
+        assert_eq!(err, "old-access-token");
+    }
+
+    #[tokio::test]
+    async fn test_ensure_fresh_token_expired_missing_refresh_token_errors() {
+        let (store, _tmp) = test_store();
+        let now = chrono::Utc::now().timestamp();
+        let mut token = token_set("anthropic", now - 10);
+        token.refresh_token = None;
+        store.save(&token).unwrap();
+
+        let err = ensure_fresh_token_with(&store, "anthropic", |_, _, _| {
+            Box::pin(async { unreachable!("refresh_fn should not be called") })
+        })
+        .await
         .unwrap_err()
         .to_string();
 
+        assert!(err.contains("expired"));
         assert!(err.contains("no refresh token"));
     }
 }

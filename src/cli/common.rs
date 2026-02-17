@@ -287,7 +287,7 @@ async fn refresh_oauth_credentials_if_needed(config: &Config) {
             }
         };
 
-        if !token.expires_within(300) {
+        if !token.expires_within(auth::refresh::REFRESH_BUFFER_SECS) {
             continue;
         }
 
