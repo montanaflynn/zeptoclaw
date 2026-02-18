@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
+  BINARY_SIZE_LIMIT_MB: 10
 
 jobs:
   test:
@@ -19,8 +20,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --lib
+      - run: cargo test --bin zeptoclaw
+      - run: cargo test --test cli_smoke
       - run: cargo test --test integration
       - run: cargo test --doc
+
+  test-features:
+    name: Test (memory-bm25)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --lib --features memory-bm25
 
   clippy:
     name: Clippy
@@ -42,3 +54,32 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --check
+
+  binary-size:
+    name: Binary size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - name: Check binary size
+        run: |
+          size_bytes=$(stat --format=%s target/release/zeptoclaw)
+          size_mb=$(awk "BEGIN {printf \"%.1f\", ${size_bytes}/1048576}")
+          echo "Binary size: ${size_mb} MB (limit: ${BINARY_SIZE_LIMIT_MB} MB)"
+          echo "### Binary size: ${size_mb} MB" >> "$GITHUB_STEP_SUMMARY"
+          limit_bytes=$((BINARY_SIZE_LIMIT_MB * 1048576))
+          if [ "${size_bytes}" -gt "${limit_bytes}" ]; then
+            echo "Binary exceeds ${BINARY_SIZE_LIMIT_MB} MB limit!" >&2
+            exit 1
+          fi
+
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
