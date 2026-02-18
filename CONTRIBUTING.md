@@ -20,9 +20,37 @@ cargo clippy -- -D warnings
 cargo fmt --check
 ```
 
+## Branching (Important for Forks)
+
+**Always branch from `upstream/main`**, not your fork's `main`:
+
+```bash
+# One-time setup: add upstream remote
+git remote add upstream https://github.com/qhkm/zeptoclaw.git
+
+# Start every new feature branch from upstream
+git fetch upstream
+git checkout -b feat/my-feature upstream/main
+# ... work ...
+git push origin feat/my-feature
+# Open PR against qhkm/zeptoclaw main
+```
+
+**Do not** merge your feature branches into your fork's `main`. Keep your fork's `main` as a clean mirror of upstream:
+
+```bash
+# Sync your fork's main (don't merge feature branches into it)
+git checkout main
+git fetch upstream
+git reset --hard upstream/main
+git push origin main --force-with-lease
+```
+
+This ensures each PR only contains its own commits. PRs that include unrelated commits from other branches will be asked to rebase.
+
 ## Pull Request Process
 
-1. Create a feature branch from `main`
+1. Create a feature branch from `upstream/main` (see above)
 2. Make your changes with clear, focused commits
 3. Ensure all quality gates pass (see below)
 4. Open a PR against `main` with a description of what and why
@@ -32,7 +60,7 @@ cargo fmt --check
 Every PR must pass:
 
 ```bash
-cargo test                    # All 1,119+ tests pass
+cargo test                    # All tests pass
 cargo clippy -- -D warnings   # No warnings
 cargo fmt --check             # Properly formatted
 ```
