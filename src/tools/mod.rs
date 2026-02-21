@@ -59,6 +59,7 @@ pub mod cron;
 pub mod custom;
 pub mod delegate;
 pub mod filesystem;
+pub mod git;
 pub mod gsheets;
 pub mod longterm_memory;
 pub mod mcp;
@@ -79,6 +80,7 @@ pub mod whatsapp;
 
 pub use binary_plugin::BinaryPluginTool;
 pub use custom::CustomTool;
+pub use git::GitTool;
 pub use delegate::DelegateTool;
 pub use gsheets::GoogleSheetsTool;
 pub use longterm_memory::LongTermMemoryTool;

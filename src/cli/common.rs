@@ -28,7 +28,7 @@ use zeptoclaw::tools::filesystem::{EditFileTool, ListDirTool, ReadFileTool, Writ
 use zeptoclaw::tools::shell::ShellTool;
 use zeptoclaw::tools::spawn::SpawnTool;
 use zeptoclaw::tools::{
-    EchoTool, GoogleSheetsTool, MemoryGetTool, MemorySearchTool, MessageTool, R8rTool,
+    EchoTool, GitTool, GoogleSheetsTool, MemoryGetTool, MemorySearchTool, MessageTool, R8rTool,
     WebFetchTool, WebSearchTool, WhatsAppTool,
 };
 
@@ -590,6 +590,16 @@ Enable runtime.allow_fallback_to_native to opt in to native fallback.",
         agent
             .register_tool(Box::new(ShellTool::with_runtime(runtime)))
             .await;
+    }
+
+    // Register git tool.
+    if tool_enabled("git") {
+        if GitTool::is_available() {
+            agent.register_tool(Box::new(GitTool::new())).await;
+            info!("Registered git tool");
+        } else {
+            tracing::debug!("git binary not found, skipping git tool");
+        }
     }
 
     // Register web tools.
