@@ -64,28 +64,35 @@ Memory backends are NOT in scope — the pluggable `MemorySearcher` architecture
 
 ---
 
-## 3. Autonomy Levels
+## 3. Agent Modes (Category-Based)
 
 **Why:** A laptop agent can run shell commands; a robot agent should be read-only until explicitly supervised. Controls what the agent is allowed to do based on context.
 
 **Design:**
-- New file `src/security/autonomy.rs` with `AutonomyLevel` enum and `AutonomyPolicy` struct
-- Three levels:
-  - `ReadOnly` — read files, search, fetch web, query memory. No write/execute/send
-  - `Supervised` — everything allowed but Execute/Destructive tools require approval (reuses `ApprovalGate`)
-  - `Full` — no restrictions (current behavior, stays default)
-- Risk classification: each tool gets a `ToolRisk` tag (Read/Write/Execute/Destructive)
-  - ReadOnly: only Read tools allowed
-  - Supervised: Read + Write auto-allowed, Execute + Destructive require approval
-  - Full: everything auto-allowed
-- Wiring: checked in agent loop before tool execution, before `ApprovalGate`. If blocked by autonomy, tool doesn't reach approval
-- Per-template override: `agent --template robot --autonomy supervised`
+- New file `src/security/agent_mode.rs` with `AgentMode` enum and `ModePolicy` struct
+- Three modes:
+  - `Observer` — can only use tools in `filesystem:read`, `network:read`, `memory` categories. No writes, no execution, no messaging
+  - `Assistant` — all categories allowed, but `shell`, `hardware`, `destructive` categories require approval (reuses existing `ApprovalGate`)
+  - `Autonomous` — no restrictions (current behavior, stays the default)
+- Category-based tool classification: each tool tagged with a category
+  - `filesystem:read` — file read, list, glob
+  - `filesystem:write` — file write, edit
+  - `network:read` — web search, web fetch
+  - `network:write` — http_request, messaging
+  - `shell` — shell execution
+  - `hardware` — device commands, GPIO, serial
+  - `memory` — memory read/write
+  - `messaging` — channel send, proactive messaging
+  - `destructive` — cron delete, file delete, etc.
+- Each mode defines which categories are: allowed, require-approval, or blocked
+- Wiring: checked in agent loop before tool execution, before `ApprovalGate`. If blocked by mode, tool doesn't reach approval
+- CLI: `zeptoclaw agent --mode observer`, `zeptoclaw agent --template robot --mode assistant`
 
 **Config:**
-- `security.autonomy_level` (default: `"full"`)
-- Env var: `ZEPTOCLAW_SECURITY_AUTONOMY_LEVEL`
+- `security.agent_mode` (default: `"autonomous"`)
+- Env var: `ZEPTOCLAW_SECURITY_AGENT_MODE`
 
-**Tests:** Level enforcement per risk category, config/env override, template override, interaction with approval gate (~15 tests)
+**Tests:** Mode enforcement per category, config/env override, template override, interaction with approval gate (~15 tests)
 
 ---
 
@@ -138,7 +145,7 @@ Dependencies and effort guide the sequence:
 
 ```
 1. Response cache         — new module, zero deps, 1 day
-2. Autonomy levels        — new file, wires into agent loop, 1 day
+2. Agent modes            — new file, wires into agent loop, 1 day
 3. Device pairing         — new file + gateway middleware + CLI, 2 days
 4. Hardware support       — new directories + feature flags + tool, 3 days
 ```
@@ -155,7 +162,7 @@ Items 1–2 are independent. Item 3 is independent but should come before 4 (pai
 | Action rate limiting (max_actions/hour) | YAGNI for personal use |
 | Sandbox backends (Landlock/Bubblewrap/Firejail) | Linux-only; Docker + Apple Containers already cover this |
 | SQLite/PostgreSQL memory backends | Pluggable arch — users opt in |
-| Full RBAC (roles, permissions) | Autonomy levels are sufficient for now |
+| Full RBAC (roles, permissions) | Agent modes are sufficient for now |
 
 ---
 
@@ -164,7 +171,7 @@ Items 1–2 are independent. Item 3 is independent but should come before 4 (pai
 | Item | Estimated impact |
 |---|---|
 | Response cache | ~0 (code only, no new deps) |
-| Autonomy levels | ~0 (code only) |
+| Agent modes | ~0 (code only) |
 | Device pairing | ~0 (code only, sha2 already in dep tree) |
 | Hardware (base) | 0 default / ~200KB with `--features hardware` |
 | RPi GPIO | 0 default / ~100KB with `--features peripheral-rpi` |
