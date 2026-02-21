@@ -163,6 +163,14 @@ impl Config {
 
         // Routines
         self.apply_routines_env_overrides();
+
+        // Transcription
+        if let Ok(val) = std::env::var("ZEPTOCLAW_TRANSCRIPTION_MODEL") {
+            self.transcription.model = val;
+        }
+        if let Ok(val) = std::env::var("ZEPTOCLAW_TRANSCRIPTION_ENABLED") {
+            self.transcription.enabled = val == "true" || val == "1";
+        }
     }
 
     /// Apply provider-specific environment variable overrides
