@@ -28,6 +28,7 @@ pub mod security;
 pub mod session;
 pub mod skills;
 pub mod tools;
+pub mod transcription;
 pub mod tunnel;
 pub mod utils;
 
