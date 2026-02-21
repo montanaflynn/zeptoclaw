@@ -7,21 +7,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Project management backend selection.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectBackend {
     /// GitHub Issues REST API.
+    #[default]
     Github,
     /// Jira REST API v3.
     Jira,
     /// Linear GraphQL API.
     Linear,
-}
-
-impl Default for ProjectBackend {
-    fn default() -> Self {
-        ProjectBackend::Github
-    }
 }
 
 /// Project management tool configuration.

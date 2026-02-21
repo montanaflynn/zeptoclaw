@@ -245,6 +245,7 @@ impl ProjectTool {
         Ok(format!("Created issue #{}: {}", number, html_url))
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn github_update_issue(
         &self,
         repo: &str,
