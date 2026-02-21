@@ -108,6 +108,12 @@ chrono = { version = "0.4", features = ["serde"] }
 chromiumoxide = { version = "0.7", optional = true, default-features = false, features = ["tokio-runtime"] }
 
 # =============================================================================
+# PDF (optional — feature-gated behind "tool-pdf")
+# =============================================================================
+# Pure-Rust PDF parser for text extraction
+lopdf = { version = "0.34", optional = true }
+
+# =============================================================================
 # CHANNELS
 # =============================================================================
 # WebSocket support for future real-time channels
@@ -127,6 +133,8 @@ default = []
 memory-bm25 = []
 # Web screenshot tool via headless Chromium (Chrome DevTools Protocol)
 screenshot = ["chromiumoxide"]
+# PDF text extraction tool via lopdf
+tool-pdf = ["lopdf"]
 
 [dev-dependencies]
 tokio-test = "0.4"
